@@ -50,9 +50,9 @@ export async function GET(request: NextRequest) {
     const configData = configDoc.data();
 
     return NextResponse.json({
-      showAvatar: configData.showAvatar ?? true,
-      showTypingIndicator: configData.showTypingIndicator ?? true,
-      showOnlineStatus: configData.showOnlineStatus ?? true
+      showAvatar: configData?.showAvatar ?? true,
+      showTypingIndicator: configData?.showTypingIndicator ?? true,
+      showOnlineStatus: configData?.showOnlineStatus ?? true
     });
   } catch (error: any) {
     console.error('Error fetching features live chat settings:', error);

@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
     const configData = configDoc.data();
 
     return NextResponse.json({
-      customCSS: configData.customCSS ?? ''
+      customCSS: configData?.customCSS ?? ''
     });
   } catch (error: any) {
     console.error('Error fetching advanced live chat settings:', error);

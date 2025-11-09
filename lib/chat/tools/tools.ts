@@ -35,25 +35,25 @@ export const getTools = async (toolsState: ToolsState) => {
 
   if (fileSearchEnabled) {
     const fileSearchTool = {
-      type: "file_search",
+      type: "file_search" as const,
       vector_store_ids: [vectorStore?.id],
     };
     tools.push(fileSearchTool);
   }
 
   if (codeInterpreterEnabled) {
-    tools.push({ type: "code_interpreter", container: { type: "auto" } });
+    tools.push({ type: "code_interpreter" as const, container: { type: "auto" as const } });
   }
 
   if (functionsEnabled) {
     tools.push(
       ...toolsList.map((tool) => {
         return {
-          type: "function",
+          type: "function" as const,
           name: tool.name,
           description: tool.description,
           parameters: {
-            type: "object",
+            type: "object" as const,
             properties: { ...tool.parameters },
             required: Object.keys(tool.parameters),
             additionalProperties: false,

@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
     // Filter by search query if provided
     if (search.trim()) {
       const searchLower = search.toLowerCase();
-      allArticles = allArticles.filter((article) =>
+      allArticles = allArticles.filter((article: any) =>
         article.title?.toLowerCase().includes(searchLower) ||
         article.content?.toLowerCase().includes(searchLower)
       );

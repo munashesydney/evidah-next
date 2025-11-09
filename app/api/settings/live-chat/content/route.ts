@@ -51,10 +51,10 @@ export async function GET(request: NextRequest) {
     const configData = configDoc.data();
 
     return NextResponse.json({
-      welcomeMessage: configData.welcomeMessage ?? 'Hi! How can I help you today?',
-      placeholderText: configData.placeholderText ?? 'Type your message...',
-      companyName: configData.companyName ?? 'Support',
-      offlineMessage: configData.offlineMessage ?? 'We\'re currently offline. Leave us a message and we\'ll get back to you soon!'
+      welcomeMessage: configData?.welcomeMessage ?? 'Hi! How can I help you today?',
+      placeholderText: configData?.placeholderText ?? 'Type your message...',
+      companyName: configData?.companyName ?? 'Support',
+      offlineMessage: configData?.offlineMessage ?? 'We\'re currently offline. Leave us a message and we\'ll get back to you soon!'
     });
   } catch (error: any) {
     console.error('Error fetching content live chat settings:', error);

@@ -286,13 +286,16 @@ export const processMessages = async () => {
             toolCallMessage.tool_type === "function_call"
           ) {
             // Handle tool call (execute function)
+            console.log('🔧 Executing tool:', toolCallMessage.name);
             const toolResult = await handleTool(
               toolCallMessage.name as keyof typeof functionsMap,
               toolCallMessage.parsedArguments
             );
+            console.log('✅ Tool result:', toolResult);
 
             // Record tool output
             toolCallMessage.output = JSON.stringify(toolResult);
+            console.log('💾 Saved tool output to message');
             setChatMessages([...chatMessages]);
             conversationItems.push({
               type: "function_call_output",
@@ -303,7 +306,9 @@ export const processMessages = async () => {
             setConversationItems([...conversationItems]);
 
             // Create another turn after tool output has been added
+            console.log('🔄 Starting recursive turn for assistant response...');
             await processMessages();
+            console.log('✅ Recursive turn completed');
           }
           break;
         }

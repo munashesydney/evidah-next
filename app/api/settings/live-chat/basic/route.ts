@@ -51,10 +51,10 @@ export async function GET(request: NextRequest) {
     const configData = configDoc.data();
 
     return NextResponse.json({
-      enabled: configData.enabled ?? true,
-      position: configData.position ?? 'bottom-right',
-      theme: configData.theme ?? 'default',
-      size: configData.size ?? 'medium'
+      enabled: configData?.enabled ?? true,
+      position: configData?.position ?? 'bottom-right',
+      theme: configData?.theme ?? 'default',
+      size: configData?.size ?? 'medium'
     });
   } catch (error: any) {
     console.error('Error fetching basic live chat settings:', error);

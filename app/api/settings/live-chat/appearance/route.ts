@@ -52,11 +52,11 @@ export async function GET(request: NextRequest) {
     const configData = configDoc.data();
 
     return NextResponse.json({
-      bubbleShape: configData.bubbleShape ?? 'rectangle',
-      bubbleIcon: configData.bubbleIcon ?? 'chat',
-      customIconUrl: configData.customIconUrl ?? '',
-      primaryColor: configData.primaryColor ?? '#6366f1',
-      borderRadius: configData.borderRadius ?? '12'
+      bubbleShape: configData?.bubbleShape ?? 'rectangle',
+      bubbleIcon: configData?.bubbleIcon ?? 'chat',
+      customIconUrl: configData?.customIconUrl ?? '',
+      primaryColor: configData?.primaryColor ?? '#6366f1',
+      borderRadius: configData?.borderRadius ?? '12'
     });
   } catch (error: any) {
     console.error('Error fetching appearance live chat settings:', error);

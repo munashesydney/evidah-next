@@ -188,7 +188,7 @@ export async function GET(req: NextRequest) {
     const lastDoc = docs.length > 0 ? docs[docs.length - 1] : null;
 
     // Process categories data
-    const categories = docs.map((doc) => {
+    const categories = docs.map((doc: any) => {
       const data = doc.data();
       return {
         id: doc.id,

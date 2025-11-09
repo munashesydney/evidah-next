@@ -288,7 +288,7 @@ export default function BlockNoteEditorComponent({
           <SuggestionMenuController
             triggerCharacter="/"
             getItems={async (query) =>
-              filterSuggestionItems(getCustomSlashMenuItems(editor, inputRef), query)
+              filterSuggestionItems(getCustomSlashMenuItems(editor, inputRef as React.RefObject<HTMLInputElement>), query)
             }
           />
         </BlockNoteView>

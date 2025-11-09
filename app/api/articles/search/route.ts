@@ -104,8 +104,8 @@ export async function GET(req: NextRequest) {
 
       // Sort by createdAt descending
       allArticles.sort((a, b) => {
-        const aTime = a.createdAt?.toDate?.()?.getTime() || 0;
-        const bTime = b.createdAt?.toDate?.()?.getTime() || 0;
+        const aTime = (a as any).createdAt?.toDate?.()?.getTime() || 0;
+        const bTime = (b as any).createdAt?.toDate?.()?.getTime() || 0;
         return bTime - aTime;
       });
 
@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
       const docs = hasMore ? allArticles.slice(0, limit) : allArticles;
       const lastDoc = docs.length > 0 ? docs[docs.length - 1] : null;
 
-      const articles = docs.map((article) => ({
+      const articles = docs.map((article: any) => ({
         id: article.id,
         categoryId: article.categoryId,
         categoryName: article.categoryName,
@@ -228,7 +228,7 @@ export async function GET(req: NextRequest) {
             categoryId: categoryDoc.id,
             categoryName: categoryDoc.data().name,
           }))
-          .filter((article) => {
+          .filter((article: any) => {
             const titleLower = (article.titleLowercase || article.title?.toLowerCase() || '');
             const descLower = (article.descriptionLowercase || article.description?.toLowerCase() || '');
             const rawTextLower = (article.rawTextLowercase || article.rawText?.toLowerCase() || '');
