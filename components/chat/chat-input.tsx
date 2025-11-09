@@ -3,11 +3,24 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Send, Settings } from 'lucide-react'
 
+interface Employee {
+  id: string
+  name: string
+  role: string
+  avatar: string
+  theme: {
+    primary: string
+    gradient: string
+  }
+  capabilities?: string[]
+}
+
 interface ChatInputProps {
   onSendMessage: (message: string) => Promise<void>
   isDisabled: boolean
   onToggleAIOptions: () => void
   isAIOptionsPanelOpen: boolean
+  employee: Employee
 }
 
 export default function ChatInput({
@@ -15,6 +28,7 @@ export default function ChatInput({
   isDisabled,
   onToggleAIOptions,
   isAIOptionsPanelOpen,
+  employee,
 }: ChatInputProps) {
   const [message, setMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
@@ -58,22 +72,36 @@ export default function ChatInput({
   const isSendEnabled = message.trim().length > 0 && !isDisabled && !isSending
 
   return (
-    <div className="sticky bottom-0 p-4 sm:p-6 bg-white dark:bg-gray-900">
+    <div className="flex-shrink-0 p-4 sm:p-6 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
       <div className="max-w-4xl mx-auto">
         {/* Modern card design matching old React app */}
         <div className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-lg rounded-2xl shadow-xl border border-gray-200/50 dark:border-gray-700/50 p-4">
           <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3">
             {/* Input area with AI options toggle */}
             <div className="flex-1 relative">
-              <div className="flex items-center bg-gray-50/50 dark:bg-gray-700/50 rounded-xl border border-gray-200/50 dark:border-gray-600/50 focus-within:border-violet-500 dark:focus-within:border-violet-400 transition-colors">
+              <div className={`flex items-center bg-gray-50/50 dark:bg-gray-700/50 rounded-xl border border-gray-200/50 dark:border-gray-600/50 transition-colors ${
+                employee.id === 'emma' ? 'focus-within:border-pink-500 dark:focus-within:border-pink-400' :
+                employee.id === 'marquavious' ? 'focus-within:border-blue-500 dark:focus-within:border-blue-400' :
+                employee.id === 'charlie' ? 'focus-within:border-amber-500 dark:focus-within:border-amber-400' :
+                employee.id === 'sung-wen' ? 'focus-within:border-emerald-500 dark:focus-within:border-emerald-400' :
+                'focus-within:border-violet-500 dark:focus-within:border-violet-400'
+              }`}>
                 {/* AI Options Toggle Button */}
                 <button
                   type="button"
                   onClick={onToggleAIOptions}
                   className={`p-3 transition-colors ${
                     isAIOptionsPanelOpen
-                      ? 'text-violet-500 dark:text-violet-400'
-                      : 'text-gray-400 hover:text-violet-500 dark:hover:text-violet-400'
+                      ? employee.id === 'emma' ? 'text-pink-500 dark:text-pink-400' :
+                        employee.id === 'marquavious' ? 'text-blue-500 dark:text-blue-400' :
+                        employee.id === 'charlie' ? 'text-amber-500 dark:text-amber-400' :
+                        employee.id === 'sung-wen' ? 'text-emerald-500 dark:text-emerald-400' :
+                        'text-violet-500 dark:text-violet-400'
+                      : employee.id === 'emma' ? 'text-gray-400 hover:text-pink-500 dark:hover:text-pink-400' :
+                        employee.id === 'marquavious' ? 'text-gray-400 hover:text-blue-500 dark:hover:text-blue-400' :
+                        employee.id === 'charlie' ? 'text-gray-400 hover:text-amber-500 dark:hover:text-amber-400' :
+                        employee.id === 'sung-wen' ? 'text-gray-400 hover:text-emerald-500 dark:hover:text-emerald-400' :
+                        'text-gray-400 hover:text-violet-500 dark:hover:text-violet-400'
                   }`}
                   aria-label="AI Options"
                   title="Toggle AI Options"
@@ -100,7 +128,7 @@ export default function ChatInput({
             <button
               type="submit"
               disabled={!isSendEnabled}
-              className="self-end bg-gradient-to-r from-violet-500 to-violet-600 hover:opacity-90 text-white rounded-xl p-3 shadow-lg transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              className={`self-end bg-gradient-to-r ${employee.theme.gradient} hover:opacity-90 text-white rounded-xl p-3 shadow-lg transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100`}
               aria-label="Send message"
               title={isSendEnabled ? 'Send message' : 'Type a message to send'}
             >

@@ -3,6 +3,17 @@
 @import 'tailwindcss';
 @import './additional-styles/utility-patterns.css' layer(components);
 
+/* Prevent page scrolling - only allow scrolling in specific containers */
+html {
+  overflow: hidden;
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+  height: 100%;
+}
+
 @plugin "@tailwindcss/forms" {
   strategy: base;
 }

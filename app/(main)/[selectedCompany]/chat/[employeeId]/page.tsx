@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { auth } from '@/lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
-import EmployeeSidebar from '@/components/chat/employee-sidebar'
 import ChatMessages from '@/components/chat/chat-messages'
 import ChatInput from '@/components/chat/chat-input'
 import ToolsPanel from '@/components/chat/tools-panel'
@@ -561,51 +560,97 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-screen bg-white dark:bg-gray-900 overflow-hidden">
-      {/* Employee Sidebar - Left */}
-      <EmployeeSidebar
+    <div data-chat-page className="flex h-full bg-gray-50 dark:bg-gray-900 overflow-hidden">
+      {/* Chat List Sidebar with Employee Card */}
+      <ChatListSidebar
         employee={employee}
+        onSelectChat={loadChatMessages}
+        onNewChat={handleNewChat}
+        onDeleteChat={handleDeleteChat}
         onChangeAssistant={handleChangeAssistant}
         personalityLevel={personalityLevel}
         onPersonalityChange={setPersonalityLevel}
       />
 
-      {/* Chat List Sidebar */}
-      <ChatListSidebar
-        onSelectChat={loadChatMessages}
-        onNewChat={handleNewChat}
-        onDeleteChat={handleDeleteChat}
-      />
-
       {/* Main Chat Area - Center */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {isLoadingMessages ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-gray-500 dark:text-gray-400">Loading messages...</div>
           </div>
         ) : !activeChat ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center text-gray-500 dark:text-gray-400">
-              <p className="text-lg font-medium mb-2">No chat selected</p>
-              <p className="text-sm">Select a chat or create a new one to start</p>
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* Chat Messages */}
-            <ChatMessages
-              messages={chatMessages}
-              isLoading={isAssistantLoading}
-            />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Welcome Message */}
+            <div className="flex-1 flex items-center justify-center p-6 overflow-y-auto">
+              <div className="text-center max-w-2xl">
+                <div className="mb-6">
+                  <div className={`w-20 h-20 mx-auto rounded-full bg-gradient-to-br ${employee.theme.gradient} flex items-center justify-center text-white text-3xl font-bold shadow-lg mb-4`}>
+                    {employee.name.charAt(0)}
+                  </div>
+                  <h2 className="text-3xl font-bold text-gray-800 dark:text-white mb-2">
+                    How can I help with {employee.role.toLowerCase()}?
+                  </h2>
+                  <p className="text-gray-600 dark:text-gray-400 mb-8">
+                    I'm {employee.name}, your {employee.role.toLowerCase()}. I'm here to help you with specialized tasks and provide expert assistance.
+                  </p>
+                </div>
 
-            {/* Chat Input - Bottom */}
+                {/* Capability Cards */}
+                {employee.capabilities && employee.capabilities.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                    {employee.capabilities.map((capability, index) => (
+                      <div
+                        key={index}
+                        className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-md border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-shadow"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${employee.theme.gradient} flex items-center justify-center flex-shrink-0`}>
+                            <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{capability}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Ready to get started? Type your question below or ask me about my specialties!
+                </p>
+              </div>
+            </div>
+
+            {/* Chat Input - Sticky at Bottom */}
             <ChatInput
               onSendMessage={handleSendMessage}
               isDisabled={isAssistantLoading || !activeChat}
               onToggleAIOptions={() => setIsAIOptionsPanelOpen(!isAIOptionsPanelOpen)}
               isAIOptionsPanelOpen={isAIOptionsPanelOpen}
+              employee={employee}
             />
-          </>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Chat Messages - Scrollable */}
+            <div className="flex-1 overflow-hidden">
+              <ChatMessages
+                messages={chatMessages}
+                isLoading={isAssistantLoading}
+                employee={employee}
+              />
+            </div>
+
+            {/* Chat Input - Sticky at Bottom */}
+            <ChatInput
+              onSendMessage={handleSendMessage}
+              isDisabled={isAssistantLoading || !activeChat}
+              onToggleAIOptions={() => setIsAIOptionsPanelOpen(!isAIOptionsPanelOpen)}
+              isAIOptionsPanelOpen={isAIOptionsPanelOpen}
+              employee={employee}
+            />
+          </div>
         )}
       </div>
 
