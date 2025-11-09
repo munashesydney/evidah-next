@@ -1,0 +1,7 @@
+/* Changes for dark mode */
+.bn-container[data-theming-css-variables-demo][data-color-scheme="dark"] {
+    --bn-colors-editor-text: #ffffff;
+    --bn-colors-editor-background: rgb(31 41 55 / var(--tw-bg-opacity));
+    --bn-colors-side-menu: #ffffff;
+}
+

@@ -1,0 +1,13 @@
+import { functionsMap } from "@/config/chat/functions";
+
+type ToolName = keyof typeof functionsMap;
+
+export const handleTool = async (toolName: ToolName, parameters: any) => {
+  console.log("Handle tool", toolName, parameters);
+  if (functionsMap[toolName]) {
+    return await functionsMap[toolName](parameters);
+  } else {
+    throw new Error(`Unknown tool: ${toolName}`);
+  }
+};
+
