@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useParams, usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
+import SidebarLinkGroup from '@/components/ui/sidebar-link-group';
 
 interface SidebarProps {
   sidebarOpen: boolean;
@@ -31,9 +32,6 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
     setMounted(true);
   }, []);
 
-  // Dropdown states
-  const [dashboardOpen, setDashboardOpen] = useState(pathname?.includes('/dashboard') || false);
-  const [settingsOpen, setSettingsOpen] = useState(pathname?.includes('/settings') || false);
 
   // Close on click outside
   useEffect(() => {
@@ -115,8 +113,8 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
               <Image
                 src={resolvedTheme === 'dark' ? '/dark-mode-logo.png' : '/light-mode-logo.png'}
                 alt="Logo"
-                width={120}
-                height={40}
+                width={160}
+                height={53}
                 priority
               />
             ) : (
@@ -124,8 +122,8 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
               <Image
                 src="/light-mode-logo.png"
                 alt="Logo"
-                width={120}
-                height={40}
+                width={160}
+                height={53}
                 priority
               />
             )}
@@ -144,20 +142,20 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
             </h3>
             <ul className="mt-3">
               <li
-                className={`pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0 bg-[linear-gradient(135deg,var(--tw-gradient-stops))] ${
-                  pathname === `/${selectedCompany}` &&
+                className={`pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0 bg-linear-to-r ${
+                  pathname?.includes('/chat') &&
                   'from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04]'
                 }`}
               >
                 <Link
-                  href={`/${selectedCompany}`}
+                  href={`/${selectedCompany}/chat`}
                   className="block text-gray-800 dark:text-gray-100 truncate transition duration-150 hover:text-gray-900 dark:hover:text-white"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
                       <svg
                         className={`shrink-0 fill-current ${
-                          pathname === `/${selectedCompany}`
+                          pathname?.includes('/chat')
                             ? 'text-violet-500'
                             : 'text-gray-400 dark:text-gray-500'
                         }`}
@@ -187,103 +185,105 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
               <span className="lg:hidden lg:sidebar-expanded:block 2xl:block">Knowledge Base</span>
             </h3>
             <ul className="mt-3">
-              <li
-                className={`pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0 bg-[linear-gradient(135deg,var(--tw-gradient-stops))] ${
-                  pathname?.includes('/dashboard') &&
-                  'from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04]'
-                }`}
-              >
-                <a
-                  href="#0"
-                  className={`block text-gray-800 dark:text-gray-100 truncate transition duration-150 ${
-                    pathname?.includes('/dashboard') ? '' : 'hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setDashboardOpen(!dashboardOpen);
-                    setSidebarExpanded(true);
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <svg
-                        className={`shrink-0 fill-current ${
-                          pathname?.includes('/dashboard')
-                            ? 'text-violet-500'
-                            : 'text-gray-400 dark:text-gray-500'
+              <SidebarLinkGroup open={pathname?.includes('/dashboard') || pathname?.includes('/categories') || pathname?.includes('/articles') || false}>
+                {(handleClick, open) => {
+                  const isActive = pathname?.includes('/dashboard') || pathname?.includes('/categories') || pathname?.includes('/articles');
+                  return (
+                    <>
+                      <a
+                        href="#0"
+                        className={`block text-gray-800 dark:text-gray-100 truncate transition duration-150 ${
+                          isActive ? '' : 'hover:text-gray-900 dark:hover:text-white'
                         }`}
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 16 16"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleClick();
+                          setSidebarExpanded(true);
+                        }}
                       >
-                        <path d="M5.936.278A7.983 7.983 0 0 1 8 0a8 8 0 1 1-8 8c0-.722.104-1.413.278-2.064a1 1 0 1 1 1.932.516A5.99 5.99 0 0 0 2 8a6 6 0 1 0 6-6c-.53 0-1.045.076-1.548.21A1 1 0 1 1 5.936.278Z" />
-                        <path d="M6.068 7.482A2.003 2.003 0 0 0 8 10a2 2 0 1 0-.518-3.932L3.707 2.293a1 1 0 0 0-1.414 1.414l3.775 3.775Z" />
-                      </svg>
-                      <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                        Dashboard
-                      </span>
-                    </div>
-                    {/* Icon */}
-                    <div className="flex shrink-0 ml-2">
-                      <svg
-                        className={`w-3 h-3 shrink-0 ml-1 fill-current text-gray-400 dark:text-gray-500 ${
-                          dashboardOpen && 'rotate-180'
-                        }`}
-                        viewBox="0 0 12 12"
-                      >
-                        <path d="M5.9 11.4L.5 6l1.4-1.4 4 4 4-4L11.3 6z" />
-                      </svg>
-                    </div>
-                  </div>
-                </a>
-                <div className="lg:hidden lg:sidebar-expanded:block 2xl:block">
-                  <ul className={`pl-8 mt-1 ${!dashboardOpen && 'hidden'}`}>
-                    <li className="mb-1 last:mb-0">
-                      <Link
-                        href={`/${selectedCompany}/dashboard`}
-                        className={`block transition duration-150 truncate ${
-                          pathname === `/${selectedCompany}/dashboard`
-                            ? 'text-violet-500'
-                            : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                        }`}
-                      >
-                        <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                          Main
-                        </span>
-                      </Link>
-                    </li>
-                    <li className="mb-1 last:mb-0">
-                      <Link
-                        href={`/${selectedCompany}/categories`}
-                        className={`block transition duration-150 truncate ${
-                          pathname === `/${selectedCompany}/categories`
-                            ? 'text-violet-500'
-                            : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                        }`}
-                      >
-                        <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                          Categories
-                        </span>
-                      </Link>
-                    </li>
-                    <li className="mb-1 last:mb-0">
-                      <Link
-                        href={`/${selectedCompany}/articles`}
-                        className={`block transition duration-150 truncate ${
-                          pathname?.includes('/articles')
-                            ? 'text-violet-500'
-                            : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                        }`}
-                      >
-                        <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                          Articles
-                        </span>
-                      </Link>
-                    </li>
-                  </ul>
-                </div>
-              </li>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <svg
+                              className={`shrink-0 fill-current ${
+                                isActive
+                                  ? 'text-violet-500'
+                                  : 'text-gray-400 dark:text-gray-500'
+                              }`}
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 16 16"
+                            >
+                              <path d="M5.936.278A7.983 7.983 0 0 1 8 0a8 8 0 1 1-8 8c0-.722.104-1.413.278-2.064a1 1 0 1 1 1.932.516A5.99 5.99 0 0 0 2 8a6 6 0 1 0 6-6c-.53 0-1.045.076-1.548.21A1 1 0 1 1 5.936.278Z" />
+                              <path d="M6.068 7.482A2.003 2.003 0 0 0 8 10a2 2 0 1 0-.518-3.932L3.707 2.293a1 1 0 0 0-1.414 1.414l3.775 3.775Z" />
+                            </svg>
+                            <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                              Dashboard
+                            </span>
+                          </div>
+                          {/* Icon */}
+                          <div className="flex shrink-0 ml-2">
+                            <svg
+                              className={`w-3 h-3 shrink-0 ml-1 fill-current text-gray-400 dark:text-gray-500 ${
+                                open && 'rotate-180'
+                              }`}
+                              viewBox="0 0 12 12"
+                            >
+                              <path d="M5.9 11.4L.5 6l1.4-1.4 4 4 4-4L11.3 6z" />
+                            </svg>
+                          </div>
+                        </div>
+                      </a>
+                      <div className="lg:hidden lg:sidebar-expanded:block 2xl:block">
+                        <ul className={`pl-8 mt-1 ${!open && 'hidden'}`}>
+                          <li className="mb-1 last:mb-0">
+                            <Link
+                              href={`/${selectedCompany}/dashboard`}
+                              className={`block transition duration-150 truncate ${
+                                pathname === `/${selectedCompany}/dashboard`
+                                  ? 'text-violet-500'
+                                  : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                              }`}
+                            >
+                              <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                Main
+                              </span>
+                            </Link>
+                          </li>
+                          <li className="mb-1 last:mb-0">
+                            <Link
+                              href={`/${selectedCompany}/categories`}
+                              className={`block transition duration-150 truncate ${
+                                pathname === `/${selectedCompany}/categories`
+                                  ? 'text-violet-500'
+                                  : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                              }`}
+                            >
+                              <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                Categories
+                              </span>
+                            </Link>
+                          </li>
+                          <li className="mb-1 last:mb-0">
+                            <Link
+                              href={`/${selectedCompany}/articles`}
+                              className={`block transition duration-150 truncate ${
+                                pathname?.includes('/articles')
+                                  ? 'text-violet-500'
+                                  : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                              }`}
+                            >
+                              <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                Articles
+                              </span>
+                            </Link>
+                          </li>
+                        </ul>
+                      </div>
+                    </>
+                  )
+                }}
+              </SidebarLinkGroup>
             </ul>
           </div>
 
@@ -297,7 +297,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
             </h3>
             <ul className="mt-3">
               <li
-                className={`pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0 bg-[linear-gradient(135deg,var(--tw-gradient-stops))] ${
+                className={`pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0 bg-linear-to-r ${
                   pathname?.includes('/inbox') &&
                   'from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04]'
                 }`}
@@ -341,8 +341,8 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
             </h3>
             <ul className="mt-3">
               <li
-                className={`pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0 bg-[linear-gradient(135deg,var(--tw-gradient-stops))] ${
-                  pathname?.includes('/live-chat') &&
+                className={`pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0 bg-linear-to-r ${
+                  pathname?.includes('/live-chat') && !pathname?.includes('/settings/live-chat') &&
                   'from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04]'
                 }`}
               >
@@ -354,7 +354,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
                     <div className="flex items-center">
                       <svg
                         className={`shrink-0 fill-current ${
-                          pathname?.includes('/live-chat')
+                          pathname?.includes('/live-chat') && !pathname?.includes('/settings/live-chat')
                             ? 'text-violet-500'
                             : 'text-gray-400 dark:text-gray-500'
                         }`}
@@ -375,7 +375,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
             </ul>
           </div>
 
-          {/* Training */}
+          {/* Training - Dropdown */}
           <div>
             <h3 className="text-xs uppercase text-gray-400 dark:text-gray-500 font-semibold pl-3">
               <span className="hidden lg:block lg:sidebar-expanded:hidden 2xl:hidden text-center w-6" aria-hidden="true">
@@ -384,39 +384,130 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
               <span className="lg:hidden lg:sidebar-expanded:block 2xl:block">THE BRAIN</span>
             </h3>
             <ul className="mt-3">
-              <li
-                className={`pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0 bg-[linear-gradient(135deg,var(--tw-gradient-stops))] ${
-                  pathname?.includes('/training') &&
-                  'from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04]'
-                }`}
-              >
-                <Link
-                  href={`/${selectedCompany}/training`}
-                  className="block text-gray-800 dark:text-gray-100 truncate transition duration-150 hover:text-gray-900 dark:hover:text-white"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <svg
-                        className={`shrink-0 fill-current ${
-                          pathname?.includes('/training')
-                            ? 'text-violet-500'
-                            : 'text-gray-400 dark:text-gray-500'
+              <SidebarLinkGroup open={
+                pathname?.includes('/training') && 
+                (pathname === `/${selectedCompany}/training` || 
+                 pathname?.includes('/training/documents') || 
+                 pathname?.includes('/training/rules') || 
+                 pathname?.includes('/training/faq'))
+              }>
+                {(handleClick, open) => {
+                  const isActive = 
+                    pathname?.includes('/training') && 
+                    (pathname === `/${selectedCompany}/training` || 
+                     pathname?.includes('/training/documents') || 
+                     pathname?.includes('/training/rules') || 
+                     pathname?.includes('/training/faq'));
+                  return (
+                    <>
+                      <a
+                        href="#0"
+                        className={`block text-gray-800 dark:text-gray-100 truncate transition duration-150 ${
+                          isActive ? '' : 'hover:text-gray-900 dark:hover:text-white'
                         }`}
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 16 16"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleClick();
+                          setSidebarExpanded(true);
+                        }}
                       >
-                        <path d="M8.5 5.6a.5.5 0 1 0-1 0v.716l-2 1a.5.5 0 0 0 0 .895l7 3.5a.5.5 0 0 0 .448-.894L8.5 8.35V5.6z" />
-                        <path d="M2 2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H2zm13 2v2H1V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1zm-1 3v5a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V7h14z" />
-                      </svg>
-                      <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                        Training
-                      </span>
-                    </div>
-                  </div>
-                </Link>
-              </li>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <svg
+                              className={`shrink-0 fill-current ${
+                                isActive
+                                  ? 'text-violet-500'
+                                  : 'text-gray-400 dark:text-gray-500'
+                              }`}
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 16 16"
+                            >
+                              <path d="M8.5 5.6a.5.5 0 1 0-1 0v.716l-2 1a.5.5 0 0 0 0 .895l7 3.5a.5.5 0 0 0 .448-.894L8.5 8.35V5.6z" />
+                              <path d="M2 2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H2zm13 2v2H1V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1zm-1 3v5a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V7h14z" />
+                            </svg>
+                            <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                              Training
+                            </span>
+                          </div>
+                          {/* Icon */}
+                          <div className="flex shrink-0 ml-2">
+                            <svg
+                              className={`w-3 h-3 shrink-0 ml-1 fill-current text-gray-400 dark:text-gray-500 ${
+                                open && 'rotate-180'
+                              }`}
+                              viewBox="0 0 12 12"
+                            >
+                              <path d="M5.9 11.4L.5 6l1.4-1.4 4 4 4-4L11.3 6z" />
+                            </svg>
+                          </div>
+                        </div>
+                      </a>
+                      <div className="lg:hidden lg:sidebar-expanded:block 2xl:block">
+                        <ul className={`pl-8 mt-1 ${!open && 'hidden'}`}>
+                          <li className="mb-1 last:mb-0">
+                            <Link
+                              href={`/${selectedCompany}/training`}
+                              className={`block transition duration-150 truncate ${
+                                pathname === `/${selectedCompany}/training`
+                                  ? 'text-violet-500'
+                                  : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                              }`}
+                            >
+                              <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                Refresh Knowledge
+                              </span>
+                            </Link>
+                          </li>
+                          <li className="mb-1 last:mb-0">
+                            <Link
+                              href={`/${selectedCompany}/training/documents`}
+                              className={`block transition duration-150 truncate ${
+                                pathname?.includes('/training/documents')
+                                  ? 'text-violet-500'
+                                  : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                              }`}
+                            >
+                              <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                Documents
+                              </span>
+                            </Link>
+                          </li>
+                          <li className="mb-1 last:mb-0">
+                            <Link
+                              href={`/${selectedCompany}/training/rules`}
+                              className={`block transition duration-150 truncate ${
+                                pathname?.includes('/training/rules')
+                                  ? 'text-violet-500'
+                                  : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                              }`}
+                            >
+                              <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                Rules
+                              </span>
+                            </Link>
+                          </li>
+                          <li className="mb-1 last:mb-0">
+                            <Link
+                              href={`/${selectedCompany}/training/faq`}
+                              className={`block transition duration-150 truncate ${
+                                pathname?.includes('/training/faq')
+                                  ? 'text-violet-500'
+                                  : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                              }`}
+                            >
+                              <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                FAQ
+                              </span>
+                            </Link>
+                          </li>
+                        </ul>
+                      </div>
+                    </>
+                  )
+                }}
+              </SidebarLinkGroup>
             </ul>
           </div>
 
@@ -429,60 +520,75 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
               <span className="lg:hidden lg:sidebar-expanded:block 2xl:block">General Settings</span>
             </h3>
             <ul className="mt-3">
-              <li
-                className={`pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0 bg-[linear-gradient(135deg,var(--tw-gradient-stops))] ${
-                  pathname?.includes('/settings') &&
-                  'from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04]'
-                }`}
-              >
-                <a
-                  href="#0"
-                  className={`block text-gray-800 dark:text-gray-100 truncate transition duration-150 ${
-                    pathname?.includes('/settings') ? '' : 'hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setSettingsOpen(!settingsOpen);
-                    setSidebarExpanded(true);
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <svg
-                        className={`shrink-0 fill-current ${
-                          pathname?.includes('/settings')
-                            ? 'text-violet-500'
-                            : 'text-gray-400 dark:text-gray-500'
+              <SidebarLinkGroup open={
+                pathname?.includes('/settings/account') || 
+                pathname?.includes('/settings/agents') || 
+                pathname?.includes('/settings/emails') || 
+                pathname?.includes('/settings/knowledge-base') || 
+                pathname?.includes('/settings/helpdesk') || 
+                pathname?.includes('/settings/live-chat') || 
+                pathname?.includes('/settings/plans') || 
+                false
+              }>
+                {(handleClick, open) => {
+                  const isActive = 
+                    pathname?.includes('/settings/account') || 
+                    pathname?.includes('/settings/agents') || 
+                    pathname?.includes('/settings/emails') || 
+                    pathname?.includes('/settings/knowledge-base') || 
+                    pathname?.includes('/settings/helpdesk') || 
+                    pathname?.includes('/settings/live-chat') || 
+                    pathname?.includes('/settings/plans');
+                  return (
+                    <>
+                      <a
+                        href="#0"
+                        className={`block text-gray-800 dark:text-gray-100 truncate transition duration-150 ${
+                          isActive ? '' : 'hover:text-gray-900 dark:hover:text-white'
                         }`}
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 16 16"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleClick();
+                          setSidebarExpanded(true);
+                        }}
                       >
-                        <path
-                          d="M10.5 1a3.502 3.502 0 0 1 3.355 2.5H15a1 1 0 1 1 0 2h-1.145a3.502 3.502 0 0 1-6.71 0H1a1 1 0 0 1 0-2h6.145A3.502 3.502 0 0 1 10.5 1ZM9 4.5a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0ZM5.5 9a3.502 3.502 0 0 1 3.355 2.5H15a1 1 0 1 1 0 2H8.855a3.502 3.502 0 0 1-6.71 0H1a1 1 0 1 1 0-2h1.145A3.502 3.502 0 0 1 5.5 9ZM4 12.5a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0Z"
-                          fillRule="evenodd"
-                        />
-                      </svg>
-                      <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                        Settings
-                      </span>
-                    </div>
-                    {/* Icon */}
-                    <div className="flex shrink-0 ml-2">
-                      <svg
-                        className={`w-3 h-3 shrink-0 ml-1 fill-current text-gray-400 dark:text-gray-500 ${
-                          settingsOpen && 'rotate-180'
-                        }`}
-                        viewBox="0 0 12 12"
-                      >
-                        <path d="M5.9 11.4L.5 6l1.4-1.4 4 4 4-4L11.3 6z" />
-                      </svg>
-                    </div>
-                  </div>
-                </a>
-                <div className="lg:hidden lg:sidebar-expanded:block 2xl:block">
-                  <ul className={`pl-8 mt-1 ${!settingsOpen && 'hidden'}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <svg
+                              className={`shrink-0 fill-current ${
+                                isActive
+                                  ? 'text-violet-500'
+                                  : 'text-gray-400 dark:text-gray-500'
+                              }`}
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 16 16"
+                            >
+                              <path
+                                d="M10.5 1a3.502 3.502 0 0 1 3.355 2.5H15a1 1 0 1 1 0 2h-1.145a3.502 3.502 0 0 1-6.71 0H1a1 1 0 0 1 0-2h6.145A3.502 3.502 0 0 1 10.5 1ZM9 4.5a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0ZM5.5 9a3.502 3.502 0 0 1 3.355 2.5H15a1 1 0 1 1 0 2H8.855a3.502 3.502 0 0 1-6.71 0H1a1 1 0 1 1 0-2h1.145A3.502 3.502 0 0 1 5.5 9ZM4 12.5a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0Z"
+                                fillRule="evenodd"
+                              />
+                            </svg>
+                            <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                              Settings
+                            </span>
+                          </div>
+                          {/* Icon */}
+                          <div className="flex shrink-0 ml-2">
+                            <svg
+                              className={`w-3 h-3 shrink-0 ml-1 fill-current text-gray-400 dark:text-gray-500 ${
+                                open && 'rotate-180'
+                              }`}
+                              viewBox="0 0 12 12"
+                            >
+                              <path d="M5.9 11.4L.5 6l1.4-1.4 4 4 4-4L11.3 6z" />
+                            </svg>
+                          </div>
+                        </div>
+                      </a>
+                      <div className="lg:hidden lg:sidebar-expanded:block 2xl:block">
+                        <ul className={`pl-8 mt-1 ${!open && 'hidden'}`}>
                     <li className="mb-1 last:mb-0">
                       <Link
                         href={`/${selectedCompany}/settings/account`}
@@ -541,9 +647,9 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
                     </li>
                     <li className="mb-1 last:mb-0">
                       <Link
-                        href={`/${selectedCompany}/settings/help-desk`}
+                        href={`/${selectedCompany}/settings/helpdesk`}
                         className={`block transition duration-150 truncate ${
-                          pathname?.includes(`/${selectedCompany}/settings/help-desk`)
+                          pathname?.includes(`/${selectedCompany}/settings/helpdesk`)
                             ? 'text-violet-500'
                             : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                         }`}
@@ -583,7 +689,10 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
                     </li>
                   </ul>
                 </div>
-              </li>
+                    </>
+                  )
+                }}
+              </SidebarLinkGroup>
             </ul>
           </div>
         </div>

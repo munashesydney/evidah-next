@@ -54,7 +54,11 @@ export type Item = MessageItem | ToolCallItem;
 export const handleTurn = async (
   messages: any[],
   toolsState: ToolsState,
-  onMessage: (data: any) => void
+  onMessage: (data: any) => void,
+  uid?: string,
+  selectedCompany?: string,
+  employeeId?: string,
+  personalityLevel: number = 2
 ) => {
   try {
     // Get response from the API (defined in app/api/chat/turn_response/route.ts)
@@ -64,6 +68,10 @@ export const handleTurn = async (
       body: JSON.stringify({
         messages: messages,
         toolsState: toolsState,
+        uid: uid,
+        selectedCompany: selectedCompany,
+        employeeId: employeeId,
+        personalityLevel: personalityLevel,
       }),
     });
 
@@ -113,7 +121,9 @@ export const handleTurn = async (
   }
 };
 
-export const processMessages = async () => {
+export const processMessages = async (uid?: string, selectedCompany?: string, employeeId?: string, personalityLevel: number = 2) => {
+  console.log(`[ASSISTANT] processMessages called with uid: ${uid}, selectedCompany: ${selectedCompany}, employeeId: ${employeeId}, personalityLevel: ${personalityLevel}`);
+  
   const {
     chatMessages,
     conversationItems,
@@ -129,6 +139,7 @@ export const processMessages = async () => {
   let assistantMessageContent = "";
   let functionArguments = "";
 
+  console.log(`[ASSISTANT] Calling handleTurn with uid: ${uid}, selectedCompany: ${selectedCompany}, employeeId: ${employeeId}, personalityLevel: ${personalityLevel}`);
   await handleTurn(
     allConversationItems,
     toolsState,
@@ -289,7 +300,9 @@ export const processMessages = async () => {
             console.log('🔧 Executing tool:', toolCallMessage.name);
             const toolResult = await handleTool(
               toolCallMessage.name as keyof typeof functionsMap,
-              toolCallMessage.parsedArguments
+              toolCallMessage.parsedArguments,
+              uid,
+              selectedCompany
             );
             console.log('✅ Tool result:', toolResult);
 
@@ -307,7 +320,7 @@ export const processMessages = async () => {
 
             // Create another turn after tool output has been added
             console.log('🔄 Starting recursive turn for assistant response...');
-            await processMessages();
+            await processMessages(uid, selectedCompany, employeeId, personalityLevel);
             console.log('✅ Recursive turn completed');
           }
           break;
@@ -434,7 +447,11 @@ export const processMessages = async () => {
 
         // Handle other events as needed
       }
-    }
+    },
+    uid, // Pass uid to handleTurn
+    selectedCompany, // Pass selectedCompany to handleTurn
+    employeeId, // Pass employeeId to handleTurn
+    personalityLevel // Pass personalityLevel to handleTurn
   );
 };
 

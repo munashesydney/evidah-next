@@ -36,7 +36,7 @@ export default function LiveChatSidebar() {
                 href={`/${selectedCompany}/settings/live-chat${item.path}`}
                 className={`flex items-center px-2.5 py-2 rounded-lg whitespace-nowrap ${
                   isActive(item.path)
-                    ? 'bg-[linear-gradient(135deg,var(--tw-gradient-stops))] from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04]'
+                    ? 'bg-linear-to-r from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04]'
                     : ''
                 }`}
               >

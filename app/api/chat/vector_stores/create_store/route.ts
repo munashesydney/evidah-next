@@ -3,10 +3,11 @@ import OpenAI from "openai";
 const openai = new OpenAI();
 
 export async function POST(request: Request) {
-  const { name } = await request.json();
+  const { name, storeName } = await request.json();
+  const vectorStoreName = name || storeName || "Default store";
   try {
     const vectorStore = await openai.vectorStores.create({
-      name,
+      name: vectorStoreName,
     });
     return new Response(JSON.stringify(vectorStore), { status: 200 });
   } catch (error) {

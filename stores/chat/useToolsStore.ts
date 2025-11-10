@@ -1,18 +1,5 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { defaultVectorStore } from "@/config/chat/constants";
-
-type File = {
-  id: string;
-  name: string;
-  content: string;
-};
-
-type VectorStore = {
-  id: string;
-  name: string;
-  files?: File[];
-};
 
 export type WebSearchConfig = {
   user_location?: {
@@ -28,7 +15,6 @@ export interface ToolsState {
   fileSearchEnabled: boolean;
   functionsEnabled: boolean;
   codeInterpreterEnabled: boolean;
-  vectorStore: VectorStore;
   webSearchConfig: WebSearchConfig;
 }
 
@@ -41,8 +27,6 @@ interface StoreState {
   setFunctionsEnabled: (enabled: boolean) => void;
   codeInterpreterEnabled: boolean;
   setCodeInterpreterEnabled: (enabled: boolean) => void;
-  vectorStore: VectorStore | null;
-  setVectorStore: (store: VectorStore) => void;
   webSearchConfig: WebSearchConfig;
   setWebSearchConfig: (config: WebSearchConfig) => void;
 }
@@ -50,7 +34,6 @@ interface StoreState {
 const useToolsStore = create<StoreState>()(
   persist(
     (set) => ({
-      vectorStore: defaultVectorStore.id !== "" ? defaultVectorStore : null,
       webSearchConfig: {
         user_location: {
           type: "approximate",
@@ -75,7 +58,6 @@ const useToolsStore = create<StoreState>()(
       setCodeInterpreterEnabled: (enabled) => {
         set({ codeInterpreterEnabled: enabled });
       },
-      setVectorStore: (store) => set({ vectorStore: store }),
       setWebSearchConfig: (config) => set({ webSearchConfig: config }),
     }),
     {

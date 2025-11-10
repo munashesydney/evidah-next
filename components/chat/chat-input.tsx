@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Settings } from 'lucide-react'
+import { Bot, Globe, Paperclip, ChevronDown, ArrowUp } from 'lucide-react'
 
 interface Employee {
   id: string
@@ -21,6 +21,7 @@ interface ChatInputProps {
   onToggleAIOptions: () => void
   isAIOptionsPanelOpen: boolean
   employee: Employee
+  centered?: boolean
 }
 
 export default function ChatInput({
@@ -29,10 +30,14 @@ export default function ChatInput({
   onToggleAIOptions,
   isAIOptionsPanelOpen,
   employee,
+  centered = false,
 }: ChatInputProps) {
   const [message, setMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const [selectedModel, setSelectedModel] = useState('o3-mini')
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Auto-resize textarea
   useEffect(() => {
@@ -41,6 +46,23 @@ export default function ChatInput({
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
     }
   }, [message])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsModelDropdownOpen(false)
+      }
+    }
+
+    if (isModelDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isModelDropdownOpen])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -71,75 +93,112 @@ export default function ChatInput({
   // Check if send button should be enabled
   const isSendEnabled = message.trim().length > 0 && !isDisabled && !isSending
 
+  const models = ['o3-mini', 'gpt-4o', 'gpt-4o-mini']
+
   return (
-    <div className="flex-shrink-0 p-4 sm:p-6 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
-      <div className="max-w-4xl mx-auto">
-        {/* Modern card design matching old React app */}
-        <div className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-lg rounded-2xl shadow-xl border border-gray-200/50 dark:border-gray-700/50 p-4">
-          <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3">
-            {/* Input area with AI options toggle */}
-            <div className="flex-1 relative">
-              <div className={`flex items-center bg-gray-50/50 dark:bg-gray-700/50 rounded-xl border border-gray-200/50 dark:border-gray-600/50 transition-colors ${
-                employee.id === 'emma' ? 'focus-within:border-pink-500 dark:focus-within:border-pink-400' :
-                employee.id === 'marquavious' ? 'focus-within:border-blue-500 dark:focus-within:border-blue-400' :
-                employee.id === 'charlie' ? 'focus-within:border-amber-500 dark:focus-within:border-amber-400' :
-                employee.id === 'sung-wen' ? 'focus-within:border-emerald-500 dark:focus-within:border-emerald-400' :
-                'focus-within:border-violet-500 dark:focus-within:border-violet-400'
-              }`}>
-                {/* AI Options Toggle Button */}
+    <div className={`flex-shrink-0 ${centered ? '' : 'p-4 sm:p-6'} bg-transparent`}>
+      <div className={centered ? 'w-full' : 'max-w-4xl mx-auto'}>
+        {/* Modern card design */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-gray-700/50 overflow-hidden">
+          <form onSubmit={handleSubmit} className="flex flex-col">
+            {/* Text input area */}
+            <div className="p-4 pb-2">
+              <textarea
+                ref={textareaRef}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={isDisabled ? "Select or create a chat to start..." : `Ask ${employee.name} anything`}
+                disabled={isDisabled || isSending}
+                rows={1}
+                className="w-full bg-transparent border-0 focus:ring-0 focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-base disabled:opacity-50 disabled:cursor-not-allowed resize-none"
+                style={{ maxHeight: '200px', minHeight: '48px' }}
+              />
+            </div>
+
+            {/* Bottom row with controls */}
+            <div className="flex items-center justify-between px-4 pb-4 gap-2">
+              {/* Left side: Model dropdown, Globe, Attachment */}
+              <div className="flex items-center gap-2">
+                {/* Model Selection Dropdown */}
+                <div className="relative" ref={dropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm text-gray-700 dark:text-gray-300"
+                  >
+                    <Bot size={16} className="text-gray-600 dark:text-gray-400" />
+                    <span>{selectedModel}</span>
+                    <ChevronDown size={14} className="text-gray-500 dark:text-gray-400" />
+                  </button>
+
+                  {/* Dropdown menu */}
+                  {isModelDropdownOpen && (
+                    <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[140px] z-50">
+                      {models.map((model) => (
+                        <button
+                          key={model}
+                          type="button"
+                          onClick={() => {
+                            setSelectedModel(model)
+                            setIsModelDropdownOpen(false)
+                          }}
+                          className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+                            selectedModel === model
+                              ? 'text-gray-900 dark:text-gray-100 font-medium'
+                              : 'text-gray-600 dark:text-gray-400'
+                          }`}
+                        >
+                          {model}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Globe Icon */}
                 <button
                   type="button"
                   onClick={onToggleAIOptions}
-                  className={`p-3 transition-colors ${
-                    isAIOptionsPanelOpen
-                      ? employee.id === 'emma' ? 'text-pink-500 dark:text-pink-400' :
-                        employee.id === 'marquavious' ? 'text-blue-500 dark:text-blue-400' :
-                        employee.id === 'charlie' ? 'text-amber-500 dark:text-amber-400' :
-                        employee.id === 'sung-wen' ? 'text-emerald-500 dark:text-emerald-400' :
-                        'text-violet-500 dark:text-violet-400'
-                      : employee.id === 'emma' ? 'text-gray-400 hover:text-pink-500 dark:hover:text-pink-400' :
-                        employee.id === 'marquavious' ? 'text-gray-400 hover:text-blue-500 dark:hover:text-blue-400' :
-                        employee.id === 'charlie' ? 'text-gray-400 hover:text-amber-500 dark:hover:text-amber-400' :
-                        employee.id === 'sung-wen' ? 'text-gray-400 hover:text-emerald-500 dark:hover:text-emerald-400' :
-                        'text-gray-400 hover:text-violet-500 dark:hover:text-violet-400'
-                  }`}
-                  aria-label="AI Options"
-                  title="Toggle AI Options"
+                  className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-600 dark:text-gray-400"
+                  aria-label="Web search"
+                  title="Toggle web search"
                 >
-                  <Settings size={20} />
+                  <Globe size={18} />
                 </button>
 
-                {/* Text input */}
-                <textarea
-                  ref={textareaRef}
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={isDisabled ? "Select or create a chat to start..." : "Type your message..."}
-                  disabled={isDisabled || isSending}
-                  rows={1}
-                  className="flex-1 bg-transparent border-0 focus:ring-0 text-gray-800 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 py-3 px-2 text-base disabled:opacity-50 disabled:cursor-not-allowed resize-none"
-                  style={{ maxHeight: '200px', minHeight: '48px' }}
-                />
+                {/* Attachment Icon */}
+                <button
+                  type="button"
+                  className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-600 dark:text-gray-400"
+                  aria-label="Attach file"
+                  title="Attach file"
+                >
+                  <Paperclip size={18} />
+                </button>
               </div>
+
+              {/* Right side: Send button */}
+              <button
+                type="submit"
+                disabled={!isSendEnabled}
+                className="flex items-center justify-center w-10 h-10 rounded-full bg-black dark:bg-white text-white dark:text-black hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:opacity-40"
+                aria-label="Send message"
+                title={isSendEnabled ? 'Send message' : 'Type a message to send'}
+              >
+                <ArrowUp size={18} />
+              </button>
             </div>
-
-            {/* Send button - only enabled when text is present */}
-            <button
-              type="submit"
-              disabled={!isSendEnabled}
-              className={`self-end bg-gradient-to-r ${employee.theme.gradient} hover:opacity-90 text-white rounded-xl p-3 shadow-lg transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100`}
-              aria-label="Send message"
-              title={isSendEnabled ? 'Send message' : 'Type a message to send'}
-            >
-              <Send size={20} />
-            </button>
+            
+            {/* Keyboard shortcut hint - only show when user is typing */}
+            {message.trim().length > 0 && (
+              <div className="px-4 pb-3">
+                <p className="text-xs text-gray-400 dark:text-gray-500 text-center">
+                  <kbd className="px-1.5 py-0.5 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded">Shift</kbd> + <kbd className="px-1.5 py-0.5 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded">Enter</kbd> for new line
+                </p>
+              </div>
+            )}
           </form>
-
-          {/* Helper text */}
-          <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
-            Press Enter to send, Shift+Enter for new line
-          </div>
         </div>
       </div>
     </div>

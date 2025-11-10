@@ -84,7 +84,7 @@ export default function ChatListSidebar({
           
           <div className="relative z-10 flex flex-col items-center text-center">
             {/* Employee Image */}
-            <div className="w-20 h-20 rounded-full overflow-hidden bg-white/20 backdrop-blur-sm border-2 border-white/30 shadow-md mb-2">
+            <div className="w-30 h-30 rounded-full overflow-hidden bg-white/20 backdrop-blur-sm border-2 border-white/30 shadow-md mb-2">
               <img 
                 src={employee.avatar} 
                 alt={employee.name}
@@ -106,7 +106,7 @@ export default function ChatListSidebar({
             <div className="mb-2">
               <button
                 onClick={() => setShowPersonalitySettings(!showPersonalitySettings)}
-                className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 backdrop-blur-sm rounded-full border border-white/20 hover:bg-white/20 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 px-3 py-2 bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 hover:bg-white/20 transition-colors cursor-pointer"
                 aria-label="Toggle personality settings"
               >
                 <span className="text-xs font-medium text-white/90">Personality</span>

@@ -4,23 +4,49 @@ import OpenAI from "openai";
 
 export async function POST(request: Request) {
   try {
-    const { messages, toolsState } = await request.json();
+    const { messages, toolsState, uid, selectedCompany, employeeId, personalityLevel = 2 } = await request.json();
 
-    const tools = await getTools(toolsState);
+    console.log(`[TURN RESPONSE] Received request - uid: ${uid}, selectedCompany: ${selectedCompany}, employeeId: ${employeeId}, personalityLevel: ${personalityLevel}`);
+    console.log(`[TURN RESPONSE] Tools state:`, {
+      fileSearchEnabled: toolsState?.fileSearchEnabled,
+      webSearchEnabled: toolsState?.webSearchEnabled,
+      functionsEnabled: toolsState?.functionsEnabled,
+      codeInterpreterEnabled: toolsState?.codeInterpreterEnabled,
+    });
 
-    console.log("Tools:", tools);
+    const tools = await getTools(toolsState, uid, selectedCompany, employeeId);
+
+    console.log(`[TURN RESPONSE] Generated ${tools.length} tools:`, tools.map(t => ({
+      type: t.type,
+      vector_store_ids: (t as any).vector_store_ids,
+    })));
+    
+    // Log detailed file_search tool configuration
+    const fileSearchTool = tools.find((t: any) => t.type === 'file_search');
+    if (fileSearchTool) {
+      console.log(`[TURN RESPONSE] 📁 File search tool configuration:`, JSON.stringify(fileSearchTool, null, 2));
+    } else {
+      console.log(`[TURN RESPONSE] ⚠️ No file_search tool found in tools array`);
+    }
+    
     console.log("Received messages:", messages);
 
     const openai = new OpenAI();
 
+    // Get personalized prompt
+    const instructions = await getDeveloperPrompt(uid, selectedCompany, employeeId, personalityLevel);
+    console.log(`[TURN RESPONSE] Generated personalized instructions for employee: ${employeeId || 'default'}, personality: ${personalityLevel}`);
+
+    console.log(`[TURN RESPONSE] Sending request to OpenAI with ${tools.length} tools...`);
     const events = await openai.responses.create({
       model: MODEL,
       input: messages,
-      instructions: getDeveloperPrompt(),
+      instructions,
       tools,
       stream: true,
       parallel_tool_calls: false,
     });
+    console.log(`[TURN RESPONSE] ✅ OpenAI request created, streaming response...`);
 
     // Create a ReadableStream that emits SSE data
     const stream = new ReadableStream({

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { useTheme } from 'next-themes'
 import { auth } from '@/lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import ChatMessages from '@/components/chat/chat-messages'
@@ -13,84 +14,12 @@ import useChatListStore, { Chat } from '@/stores/chat/useChatListStore'
 import { convertMessagesToItems } from '@/lib/chat/message-converter'
 import { Message } from '@/lib/services/message-service'
 
-interface Employee {
-  id: string
-  name: string
-  role: string
-  avatar: string
-  theme: {
-    primary: string
-    gradient: string
-  }
-  capabilities: string[]
-}
-
-const employees: Record<string, Employee> = {
-  charlie: {
-    id: 'charlie',
-    name: 'Charlie',
-    role: 'Customer Support',
-    avatar: '/images/characters/charlie.png',
-    theme: {
-      primary: '#D97706',
-      gradient: 'from-amber-500 to-orange-600',
-    },
-    capabilities: [
-      'Handle Support Tickets',
-      'Customer Communication',
-      'Resolve inquiries efficiently',
-    ],
-  },
-  marquavious: {
-    id: 'marquavious',
-    name: 'Marquavious',
-    role: 'Live Chat Specialist',
-    avatar: '/images/characters/mq.png',
-    theme: {
-      primary: '#2563EB',
-      gradient: 'from-blue-500 to-blue-700',
-    },
-    capabilities: [
-      'Live Chat Support',
-      'Business Operations',
-      'Real-time customer interactions',
-    ],
-  },
-  emma: {
-    id: 'emma',
-    name: 'Emma',
-    role: 'Knowledge Management',
-    avatar: '/images/characters/emma.png',
-    theme: {
-      primary: '#DB2777',
-      gradient: 'from-pink-500 to-pink-700',
-    },
-    capabilities: [
-      'Create Articles',
-      'Organize Information',
-      'Maintain knowledge base',
-    ],
-  },
-  'sung-wen': {
-    id: 'sung-wen',
-    name: 'Sung Wen',
-    role: 'Training Specialist',
-    avatar: '/images/characters/sw.png',
-    theme: {
-      primary: '#059669',
-      gradient: 'from-emerald-500 to-emerald-700',
-    },
-    capabilities: [
-      'Data Analysis',
-      'Business Forecasting',
-      'Strategic insights',
-    ],
-  },
-}
+import { employees, type Employee } from '@/lib/services/employee-helpers'
 
 export default function ChatPage() {
   const params = useParams()
   const router = useRouter()
+  const { theme, resolvedTheme } = useTheme()
   const selectedCompany = params.selectedCompany as string
   const employeeId = params.employeeId as string
   
@@ -103,6 +32,8 @@ export default function ChatPage() {
   
   const { chatMessages, setChatMessages, resetConversation, isAssistantLoading } = useConversationStore()
   const { chats, activeChat, setChats, setActiveChat, addChat, removeChat, setLoading: setChatListLoading } = useChatListStore()
+  
+  const isDarkMode = resolvedTheme === 'dark' || theme === 'dark'
 
   // Authentication
   useEffect(() => {
@@ -168,23 +99,7 @@ export default function ChatPage() {
         const data = await response.json()
         setChats(data.chats || [])
         
-        // Try to restore the last active chat from localStorage
-        const lastActiveChatId = localStorage.getItem(`activeChat_${selectedCompany}_${employeeId}`)
-        let chatToLoad = null
-        
-        if (lastActiveChatId && data.chats) {
-          chatToLoad = data.chats.find((c: Chat) => c.id === lastActiveChatId)
-        }
-        
-        // If no saved chat or it doesn't exist, use the first chat
-        if (!chatToLoad && data.chats && data.chats.length > 0) {
-          chatToLoad = data.chats[0]
-        }
-        
-        // Load the chat if found
-        if (chatToLoad && !activeChat) {
-          await loadChatMessages(chatToLoad)
-        }
+        // Don't auto-select any chat - let user choose
       } catch (error) {
         console.error('Error loading chats:', error)
       } finally {
@@ -265,42 +180,12 @@ export default function ChatPage() {
     }
   }
 
-  // Create new chat
-  const handleNewChat = async () => {
-    if (!userId || !selectedCompany || !employeeId) return
-
-    try {
-      const token = await auth.currentUser?.getIdToken()
-      if (!token) {
-        throw new Error('Not authenticated')
-      }
-
-      const response = await fetch('/api/chat/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          employeeId,
-          companyId: selectedCompany,
-          title: 'New Chat',
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to create chat')
-      }
-
-      const data = await response.json()
-      const newChat = data.chat as Chat
-      
-      addChat(newChat)
-      setActiveChat(newChat)
-      resetConversation()
-    } catch (error) {
-      console.error('Error creating chat:', error)
-    }
+  // Create new chat - just clear active chat to show centered input
+  const handleNewChat = () => {
+    setActiveChat(null)
+    resetConversation()
+    // Clear the saved active chat from localStorage
+    localStorage.removeItem(`activeChat_${selectedCompany}_${employeeId}`)
   }
 
   // Delete a chat
@@ -349,8 +234,143 @@ export default function ChatPage() {
     router.push(`/${selectedCompany}/chat`)
   }
 
+  // Get irregular gradient style for employee theme
+  const getEmployeeGradientStyle = (employeeId: string, isDark: boolean = false) => {
+    if (isDark) {
+      switch (employeeId) {
+        case 'charlie':
+          return { 
+            backgroundImage: `
+              radial-gradient(ellipse 80% 60% at 45% 50%, rgba(217, 119, 6, 0.06) 0%, transparent 50%),
+              radial-gradient(ellipse 60% 80% at 55% 50%, rgba(217, 119, 6, 0.04) 0%, transparent 50%),
+              radial-gradient(ellipse 100% 40% at 50% 60%, rgba(217, 119, 6, 0.03) 0%, transparent 60%)
+            `
+          }
+        case 'marquavious':
+          return { 
+            backgroundImage: `
+              radial-gradient(ellipse 80% 60% at 45% 50%, rgba(37, 99, 235, 0.06) 0%, transparent 50%),
+              radial-gradient(ellipse 60% 80% at 55% 50%, rgba(37, 99, 235, 0.04) 0%, transparent 50%),
+              radial-gradient(ellipse 100% 40% at 50% 60%, rgba(37, 99, 235, 0.03) 0%, transparent 60%)
+            `
+          }
+        case 'emma':
+          return { 
+            backgroundImage: `
+              radial-gradient(ellipse 80% 60% at 45% 50%, rgba(219, 39, 119, 0.06) 0%, transparent 50%),
+              radial-gradient(ellipse 60% 80% at 55% 50%, rgba(219, 39, 119, 0.04) 0%, transparent 50%),
+              radial-gradient(ellipse 100% 40% at 50% 60%, rgba(219, 39, 119, 0.03) 0%, transparent 60%)
+            `
+          }
+        case 'sung-wen':
+          return { 
+            backgroundImage: `
+              radial-gradient(ellipse 80% 60% at 45% 50%, rgba(5, 150, 105, 0.06) 0%, transparent 50%),
+              radial-gradient(ellipse 60% 80% at 55% 50%, rgba(5, 150, 105, 0.04) 0%, transparent 50%),
+              radial-gradient(ellipse 100% 40% at 50% 60%, rgba(5, 150, 105, 0.03) 0%, transparent 60%)
+            `
+          }
+        default:
+          return { 
+            backgroundImage: `
+              radial-gradient(ellipse 80% 60% at 45% 50%, rgba(107, 114, 128, 0.06) 0%, transparent 50%),
+              radial-gradient(ellipse 60% 80% at 55% 50%, rgba(107, 114, 128, 0.04) 0%, transparent 50%),
+              radial-gradient(ellipse 100% 40% at 50% 60%, rgba(107, 114, 128, 0.03) 0%, transparent 60%)
+            `
+          }
+      }
+    } else {
+      switch (employeeId) {
+        case 'charlie':
+          return { 
+            backgroundImage: `
+              radial-gradient(ellipse 80% 60% at 45% 50%, rgba(255, 251, 235, 0.4) 0%, rgba(254, 243, 199, 0.2) 30%, transparent 60%),
+              radial-gradient(ellipse 60% 80% at 55% 50%, rgba(254, 243, 199, 0.3) 0%, transparent 50%),
+              radial-gradient(ellipse 100% 40% at 50% 60%, rgba(255, 251, 235, 0.2) 0%, transparent 50%)
+            `
+          }
+        case 'marquavious':
+          return { 
+            backgroundImage: `
+              radial-gradient(ellipse 80% 60% at 45% 50%, rgba(239, 246, 255, 0.4) 0%, rgba(219, 234, 254, 0.2) 30%, transparent 60%),
+              radial-gradient(ellipse 60% 80% at 55% 50%, rgba(219, 234, 254, 0.3) 0%, transparent 50%),
+              radial-gradient(ellipse 100% 40% at 50% 60%, rgba(239, 246, 255, 0.2) 0%, transparent 50%)
+            `
+          }
+        case 'emma':
+          return { 
+            backgroundImage: `
+              radial-gradient(ellipse 80% 60% at 45% 50%, rgba(253, 244, 255, 0.4) 0%, rgba(252, 231, 243, 0.2) 30%, transparent 60%),
+              radial-gradient(ellipse 60% 80% at 55% 50%, rgba(252, 231, 243, 0.3) 0%, transparent 50%),
+              radial-gradient(ellipse 100% 40% at 50% 60%, rgba(253, 244, 255, 0.2) 0%, transparent 50%)
+            `
+          }
+        case 'sung-wen':
+          return { 
+            backgroundImage: `
+              radial-gradient(ellipse 80% 60% at 45% 50%, rgba(236, 253, 245, 0.4) 0%, rgba(209, 250, 229, 0.2) 30%, transparent 60%),
+              radial-gradient(ellipse 60% 80% at 55% 50%, rgba(209, 250, 229, 0.3) 0%, transparent 50%),
+              radial-gradient(ellipse 100% 40% at 50% 60%, rgba(236, 253, 245, 0.2) 0%, transparent 50%)
+            `
+          }
+        default:
+          return { 
+            backgroundImage: `
+              radial-gradient(ellipse 80% 60% at 45% 50%, rgba(249, 250, 251, 0.4) 0%, rgba(243, 244, 246, 0.2) 30%, transparent 60%),
+              radial-gradient(ellipse 60% 80% at 55% 50%, rgba(243, 244, 246, 0.3) 0%, transparent 50%),
+              radial-gradient(ellipse 100% 40% at 50% 60%, rgba(249, 250, 251, 0.2) 0%, transparent 50%)
+            `
+          }
+      }
+    }
+  }
+
   const handleSendMessage = async (message: string) => {
-    if (!message.trim() || !activeChat || !userId || !selectedCompany) return
+    if (!message.trim() || !userId || !selectedCompany) return
+
+    // If no active chat, create a new one first
+    let currentActiveChat = activeChat
+    if (!currentActiveChat) {
+      try {
+        const token = await auth.currentUser?.getIdToken()
+        if (!token) {
+          throw new Error('Not authenticated')
+        }
+
+        const response = await fetch('/api/chat/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            employeeId,
+            companyId: selectedCompany,
+            title: message.trim().substring(0, 50) || 'New Chat',
+          }),
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to create chat')
+        }
+
+        const data = await response.json()
+        const newChat = data.chat as Chat
+        
+        // Use the setters from the hook to ensure React re-renders
+        addChat(newChat)
+        setActiveChat(newChat)
+        resetConversation()
+        
+        currentActiveChat = newChat
+        
+        // Save active chat to localStorage
+        localStorage.setItem(`activeChat_${selectedCompany}_${employeeId}`, newChat.id)
+      } catch (error) {
+        console.error('Error creating chat:', error)
+        return
+      }
+    }
 
     const { addConversationItem, addChatMessage, setAssistantLoading, chatMessages: currentMessages } = useConversationStore.getState()
     const { processMessages } = await import('@/lib/chat/assistant')
@@ -382,7 +402,7 @@ export default function ChatPage() {
       }
 
       console.log('💾 Saving user message...')
-      const response = await fetch(`/api/chat/${activeChat.id}/messages/create`, {
+      const response = await fetch(`/api/chat/${currentActiveChat.id}/messages/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -403,7 +423,7 @@ export default function ChatPage() {
 
       // Process AI response
       console.log('🤖 Starting AI response...')
-      await processMessages()
+      await processMessages(userId, selectedCompany, employeeId, personalityLevel)
       console.log('✅ AI response completed')
       
       // Wait for ALL processing to complete, including recursive turns
@@ -519,7 +539,7 @@ export default function ChatPage() {
       // Save assistant message with tool calls only if we have content
       if (assistantContent) {
         console.log('💾 Saving assistant message with', toolCalls.length, 'tool calls...')
-        const saveResponse = await fetch(`/api/chat/${activeChat.id}/messages/create`, {
+        const saveResponse = await fetch(`/api/chat/${currentActiveChat.id}/messages/create`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -579,57 +599,29 @@ export default function ChatPage() {
             <div className="text-gray-500 dark:text-gray-400">Loading messages...</div>
           </div>
         ) : !activeChat ? (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Welcome Message */}
-            <div className="flex-1 flex items-center justify-center p-6 overflow-y-auto">
-              <div className="text-center max-w-2xl">
-                <div className="mb-6">
-                  <div className={`w-20 h-20 mx-auto rounded-full bg-gradient-to-br ${employee.theme.gradient} flex items-center justify-center text-white text-3xl font-bold shadow-lg mb-4`}>
-                    {employee.name.charAt(0)}
-                  </div>
-                  <h2 className="text-3xl font-bold text-gray-800 dark:text-white mb-2">
-                    How can I help with {employee.role.toLowerCase()}?
-                  </h2>
-                  <p className="text-gray-600 dark:text-gray-400 mb-8">
-                    I'm {employee.name}, your {employee.role.toLowerCase()}. I'm here to help you with specialized tasks and provide expert assistance.
-                  </p>
-                </div>
-
-                {/* Capability Cards */}
-                {employee.capabilities && employee.capabilities.length > 0 && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                    {employee.capabilities.map((capability, index) => (
-                      <div
-                        key={index}
-                        className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-md border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-shadow"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${employee.theme.gradient} flex items-center justify-center flex-shrink-0`}>
-                            <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{capability}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Ready to get started? Type your question below or ask me about my specialties!
-                </p>
-              </div>
-            </div>
-
-            {/* Chat Input - Sticky at Bottom */}
-            <ChatInput
-              onSendMessage={handleSendMessage}
-              isDisabled={isAssistantLoading || !activeChat}
-              onToggleAIOptions={() => setIsAIOptionsPanelOpen(!isAIOptionsPanelOpen)}
-              isAIOptionsPanelOpen={isAIOptionsPanelOpen}
-              employee={employee}
+          <div className="flex-1 flex items-center justify-center p-6 overflow-hidden bg-gray-50 dark:bg-gray-900 relative">
+            {/* Subtle radial gradient splash based on employee theme */}
+            <div 
+              className="absolute inset-0 pointer-events-none"
+              style={getEmployeeGradientStyle(employeeId, isDarkMode)}
             />
+            
+            {/* Centered Input Card */}
+            <div className="w-full max-w-2xl relative z-10">
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-8">
+                  What can I help with?
+                </h2>
+              </div>
+              <ChatInput
+                onSendMessage={handleSendMessage}
+                isDisabled={isAssistantLoading}
+                onToggleAIOptions={() => setIsAIOptionsPanelOpen(!isAIOptionsPanelOpen)}
+                isAIOptionsPanelOpen={isAIOptionsPanelOpen}
+                employee={employee}
+                centered={true}
+              />
+            </div>
           </div>
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">

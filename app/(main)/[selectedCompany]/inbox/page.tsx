@@ -686,7 +686,7 @@ export default function InboxPage() {
                           type="button"
                           className={`flex w-full p-2 rounded-lg transition-colors duration-150 text-left ${
                             isActive
-                              ? 'bg-gradient-to-r from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04] border border-violet-200 dark:border-violet-800/60'
+                              ? 'bg-linear-to-r from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04]'
                               : 'hover:bg-gray-100 dark:hover:bg-gray-800/50'
                           }`}
                           onClick={() => handleTicketSelect(item.id)}
@@ -702,11 +702,7 @@ export default function InboxPage() {
                           <div className="grow truncate">
                             <div className="flex items-center justify-between mb-1.5">
                               <div className="truncate">
-                                <span className={`text-sm font-semibold ${
-                                  isActive 
-                                    ? 'text-violet-700 dark:text-violet-400' 
-                                    : 'text-gray-800 dark:text-gray-100'
-                                }`}>
+                                <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
                                   Re: {item.subject}
                                 </span>
                               </div>
@@ -719,11 +715,7 @@ export default function InboxPage() {
                                 )}
                               </div>
                             </div>
-                            <div className={`text-xs font-medium truncate mb-0.5 ${
-                              isActive 
-                                ? 'text-violet-600 dark:text-violet-400' 
-                                : 'text-gray-800 dark:text-gray-100'
-                            }`}>
+                            <div className="text-xs font-medium truncate mb-0.5 text-gray-800 dark:text-gray-100">
                               {item.from}
                             </div>
                             <div className="text-xs text-gray-600 dark:text-gray-400 line-clamp-1">

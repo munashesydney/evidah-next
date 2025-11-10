@@ -44,7 +44,7 @@ export default function ToolsPanel() {
           <div className="flex justify-between items-center">
             <div>
               <h3 className="text-sm font-medium text-gray-900 dark:text-white">File Search</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Search uploaded documents</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Search your company's knowledge base articles</p>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
