@@ -37,10 +37,10 @@ export default function DropdownProfile({ align }: {
         
         // Get custom claims for role
         try {
-          const idTokenResult = await user.getIdTokenResult()
-          setUserRole(idTokenResult.claims.role || '')
+          const idTokenResult = await user.getIdTokenResult();
+          setUserRole(typeof idTokenResult.claims.role === 'string' ? idTokenResult.claims.role : '');
         } catch (error) {
-          console.error('Error getting user role:', error)
+          console.error('Error getting user role:', error);
         }
 
         // Fetch companies

@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import Image from 'next/image';
-import { useTheme } from 'next-themes';
+import CountryPicker from '@/components/country-picker';
 
 interface CheckoutFormProps {
   userEmail: string;
@@ -15,9 +15,12 @@ interface CheckoutFormProps {
     industry: string;
     websiteUrl: string;
   };
+  plan: string;
+  billingPeriod: string;
+  selectedCompany: string;
 }
 
-function CheckoutForm({ userEmail, onboardingData, plan, billingPeriod, selectedCompany }: CheckoutFormProps & { plan: string; billingPeriod: string; selectedCompany: string }) {
+function CheckoutForm({ userEmail, onboardingData, plan, billingPeriod, selectedCompany }: CheckoutFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const router = useRouter();
@@ -34,7 +37,6 @@ function CheckoutForm({ userEmail, onboardingData, plan, billingPeriod, selected
   const [customerId, setCustomerId] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   
-  // Pricing based on plan and billing period
   const getPricing = () => {
     if (plan === 'evidah_q') {
       return {
@@ -43,7 +45,6 @@ function CheckoutForm({ userEmail, onboardingData, plan, billingPeriod, selected
         monthlyEquivalent: billingPeriod === 'yearly' ? 29 : 39,
       };
     } else {
-      // Individual employees: $29/month or $228/year ($19/month)
       return {
         monthly: 29,
         yearly: 228,
@@ -58,25 +59,12 @@ function CheckoutForm({ userEmail, onboardingData, plan, billingPeriod, selected
   const total = subtotal - discount;
   const monthlyEquivalent = pricing.monthlyEquivalent;
 
-  // Update email when userEmail prop changes
   useEffect(() => {
     if (userEmail) {
       setEmail(userEmail);
     }
   }, [userEmail]);
-
-  // Countries list (simplified)
-  const countries = [
-    'United States',
-    'Canada',
-    'United Kingdom',
-    'Australia',
-    'Germany',
-    'France',
-    'Other'
-  ];
-
-  // No auto-creation - SetupIntent created on form submit
+ 
 
   const createSetupIntent = async () => {
     try {
@@ -167,7 +155,6 @@ function CheckoutForm({ userEmail, onboardingData, plan, billingPeriod, selected
     }
 
     try {
-      // Create setup intent if not already created
       let secret = clientSecret;
       let custId = customerId;
       
@@ -181,7 +168,6 @@ function CheckoutForm({ userEmail, onboardingData, plan, billingPeriod, selected
         throw new Error('Failed to initialize payment');
       }
 
-      // Confirm setup intent to save payment method
       const { error: confirmError, setupIntent } = await stripe.confirmCardSetup(secret, {
         payment_method: {
           card: cardElement,
@@ -202,7 +188,6 @@ function CheckoutForm({ userEmail, onboardingData, plan, billingPeriod, selected
         throw new Error('Failed to save payment method');
       }
 
-      // Create subscription with the saved payment method
       const subscriptionResponse = await fetch('/api/stripe/create-subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -226,13 +211,11 @@ function CheckoutForm({ userEmail, onboardingData, plan, billingPeriod, selected
         throw new Error(subscriptionData.error || 'Failed to create subscription');
       }
 
-      // Clear onboarding data from localStorage
       if (typeof window !== 'undefined') {
         localStorage.removeItem('onboarding_industry');
         localStorage.removeItem('onboarding_websiteUrl');
       }
 
-      // Redirect to success page
       router.push('/onboardingcompletion');
     } catch (err: any) {
       setError(err.message || 'Subscription creation failed');
@@ -241,63 +224,42 @@ function CheckoutForm({ userEmail, onboardingData, plan, billingPeriod, selected
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      {/* Left Column - Checkout Form */}
-      <div>
-        <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Create Account Section */}
-          <div>
-            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">
-              1. Your Account
-            </h2>
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2 text-gray-800 dark:text-gray-100" htmlFor="email">
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                required
-                readOnly
-                aria-readonly="true"
-                placeholder="you@example.com"
-                className="form-input w-full"
-              />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                With this email address you'll get access to Evidah AI products. Please make sure it's correct.
-              </p>
-            </div>
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-12">
+      <div className="order-2 lg:order-1 lg:col-span-3">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <label className="block text-sm font-medium mb-2 text-gray-900" htmlFor="email">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              readOnly={!!userEmail}
+              aria-readonly={!!userEmail}
+              placeholder="you@example.com"
+              className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent text-gray-900 ${userEmail ? 'bg-gray-50' : 'bg-white'}`}
+            />
           </div>
 
-          {/* Select Payment Method Section */}
-          <div>
-            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">
-              2. Select Payment Method
-            </h2>
-            <div className="mb-4">
-              <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-white dark:bg-gray-900">
-                <div className="flex items-center gap-3">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                  </svg>
-                  <span className="font-medium text-gray-800 dark:text-gray-100">Card</span>
-                </div>
-              </div>
-            </div>
-            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800">
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <h3 className="text-sm font-medium mb-4 text-gray-900">Card information</h3>
+            <div className="border border-gray-300 rounded-lg p-4 bg-white">
               <CardElement
                 options={{
                   style: {
                     base: {
                       fontSize: '16px',
-                      color: '#424770',
+                      color: '#1f2937',
+                      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                       '::placeholder': {
-                        color: '#aab7c4',
+                        color: '#9ca3af',
                       },
                     },
                     invalid: {
-                      color: '#9e2146',
+                      color: '#ef4444',
                     },
                   },
                 }}
@@ -305,15 +267,12 @@ function CheckoutForm({ userEmail, onboardingData, plan, billingPeriod, selected
             </div>
           </div>
 
-          {/* Add Billing Details Section */}
-          <div>
-            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">
-              3. Add Billing Details
-            </h2>
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <h3 className="text-sm font-medium mb-4 text-gray-900">Billing details</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-800 dark:text-gray-100" htmlFor="fullName">
-                  Full name
+                <label className="block text-sm font-medium mb-2 text-gray-900" htmlFor="fullName">
+                  Name
                 </label>
                 <input
                   id="fullName"
@@ -321,128 +280,133 @@ function CheckoutForm({ userEmail, onboardingData, plan, billingPeriod, selected
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   required
-                  className="form-input w-full"
+                  placeholder="Full name"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent text-gray-900"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-800 dark:text-gray-100" htmlFor="country">
-                  Country or region
+                <label className="block text-sm font-medium mb-2 text-gray-900" htmlFor="country">
+                  Country
                 </label>
-                <select
+                <CountryPicker
                   id="country"
                   value={country}
-                  onChange={(e) => setCountry(e.target.value)}
+                  onChange={setCountry}
                   required
-                  className="form-input w-full"
-                >
-                  {countries.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                />
               </div>
             </div>
           </div>
 
           {error && (
-            <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-700">{error}</p>
             </div>
           )}
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-3 pt-2">
             <input
               type="checkbox"
               id="terms"
               checked={termsAccepted}
               onChange={(e) => setTermsAccepted(e.target.checked)}
               required
-              className="form-checkbox"
+              className="mt-1 h-4 w-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500"
             />
-            <label htmlFor="terms" className="text-sm text-gray-700 dark:text-gray-300">
-              By purchasing, you agree to our{' '}
-              <a href="#" className="text-violet-500 hover:text-violet-600">Terms and Conditions</a>
+            <label htmlFor="terms" className="text-sm text-gray-600 leading-relaxed">
+              I agree to the{' '}
+              <a href="#" className="text-violet-600 hover:text-violet-700 font-medium">Terms of Service</a>
               {' '}and{' '}
-              <a href="#" className="text-violet-500 hover:text-violet-600">Privacy Policy</a>.
+              <a href="#" className="text-violet-600 hover:text-violet-700 font-medium">Privacy Policy</a>
             </label>
           </div>
 
           <button
             type="submit"
             disabled={loading || !stripe}
-            className="btn w-full bg-violet-500 text-white hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-4 px-6 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-base"
           >
-            {loading ? 'Processing...' : `Pay $${total.toFixed(2)}`}
+            {loading ? (
+              <span className="flex items-center justify-center">
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Processing...
+              </span>
+            ) : (
+              `Pay $${total.toFixed(2)}`
+            )}
           </button>
+
+          <p className="text-xs text-center text-gray-500 pt-2">
+            Payments are secure and encrypted. Powered by <b>stripe</b>.
+          </p>
         </form>
       </div>
 
-      {/* Right Column - Order Summary */}
-      <div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-200 dark:border-gray-700 sticky top-8">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Order Summary</h2>
-            <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-1 rounded">
-              14 DAYS Money Back Guarantee
-            </span>
-          </div>
+      <div className="order-1 lg:order-2 lg:col-span-2">
+        <div className="bg-white rounded-lg border border-gray-200 p-6 sticky top-8">
+          <h2 className="text-lg font-semibold text-gray-900 mb-6">Order summary</h2>
 
-          {/* Product Display */}
-          <div className="mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-violet-100 dark:bg-violet-900/30 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">Q</span>
+          <div className="mb-6 pb-6 border-b border-gray-200">
+            <div className="flex items-start gap-4">
+              <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 border border-gray-200">
+                <Image
+                  src="/images/employees/evidah-q.png"
+                  alt="Product"
+                  width={80}
+                  height={80}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '/user-avatar-80.png';
+                  }}
+                />
               </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-gray-800 dark:text-gray-100">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-medium text-gray-900 mb-1">
                   {plan === 'evidah_q' ? 'EvidahQ Bundle' : 
                    plan === 'charlie' ? 'Charlie' :
                    plan === 'marquavious' ? 'Marquavious' :
                    plan === 'emma' ? 'Emma' :
                    plan === 'sung_wen' ? 'Sung Wen' : plan}
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Billed {billingPeriod === 'yearly' ? 'Yearly' : 'Monthly'}
+                <p className="text-sm text-gray-600 mb-2">
+                  {billingPeriod === 'yearly' ? 'Annual subscription' : 'Monthly subscription'}
                 </p>
                 {billingPeriod === 'yearly' && (
-                  <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                    ${monthlyEquivalent}/month • Save ${(pricing.monthly * 12) - basePrice}
-                  </p>
+                  <div className="inline-flex items-center px-2 py-1 bg-green-50 text-green-700 text-xs font-medium rounded">
+                    Save ${(pricing.monthly * 12) - basePrice}/year
+                  </div>
                 )}
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-lg font-bold text-gray-800 dark:text-gray-100">
-                    ${basePrice.toFixed(2)}
-                    {billingPeriod === 'yearly' && <span className="text-sm font-normal text-gray-500">/year</span>}
-                    {billingPeriod === 'monthly' && <span className="text-sm font-normal text-gray-500">/month</span>}
-                  </span>
-                </div>
               </div>
             </div>
           </div>
 
-          {/* Coupon Code */}
           <div className="mb-6">
+            <label className="block text-sm font-medium mb-2 text-gray-900">Promo code</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={couponCode}
                 onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                placeholder="Coupon Code"
-                className="form-input flex-1"
+                placeholder="Enter code"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent text-gray-900 text-sm"
                 disabled={!!appliedCoupon}
               />
               <button
                 type="button"
                 onClick={handleApplyCoupon}
                 disabled={!!appliedCoupon || !couponCode.trim()}
-                className="btn bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50"
+                className="px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
               >
                 Apply
               </button>
             </div>
             {appliedCoupon && (
               <div className="mt-2 flex items-center gap-2">
-                <span className="text-sm bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                  {appliedCoupon}
+                <span className="inline-flex items-center px-2 py-1 bg-green-50 text-green-700 text-xs font-medium rounded">
+                  {appliedCoupon} applied
                 </span>
                 <button
                   type="button"
@@ -453,54 +417,101 @@ function CheckoutForm({ userEmail, onboardingData, plan, billingPeriod, selected
                   }}
                   className="text-sm text-gray-500 hover:text-gray-700"
                 >
-                  ×
+                  Remove
                 </button>
               </div>
             )}
           </div>
 
-          {/* Price Breakdown */}
-          <div className="space-y-2 mb-6">
+          <div className="space-y-3 mb-6 pb-6 border-b border-gray-200">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600 dark:text-gray-400">Subtotal</span>
-              <span className="text-gray-800 dark:text-gray-100">${subtotal.toFixed(2)}</span>
+              <span className="text-gray-600">Subtotal</span>
+              <span className="text-gray-900 font-medium">${subtotal.toFixed(2)}</span>
             </div>
             {discount > 0 && (
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600 dark:text-gray-400">Discount</span>
-                <span className="text-green-600 dark:text-green-400">-${discount.toFixed(2)}</span>
+                <span className="text-gray-600">Discount</span>
+                <span className="text-green-600 font-medium">-${discount.toFixed(2)}</span>
               </div>
             )}
-            <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200 dark:border-gray-700">
-              <span className="text-gray-800 dark:text-gray-100">Total</span>
-              <span className="text-gray-800 dark:text-gray-100">USD ${total.toFixed(2)}</span>
+          </div>
+
+          <div className="flex justify-between items-baseline mb-6">
+            <span className="text-base font-semibold text-gray-900">Total due today</span>
+            <div className="text-right">
+              <div className="text-2xl font-bold text-gray-900">${total.toFixed(2)}</div>
+              {billingPeriod === 'yearly' && (
+                <div className="text-xs text-gray-500 mt-1">${monthlyEquivalent}/month</div>
+              )}
             </div>
           </div>
 
-          <p className="text-xs text-gray-500 dark:text-gray-400 text-center mb-4">
-            Secure Checkout Powered by{' '}
-            <span className="font-semibold">stripe</span>
-          </p>
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-sm font-medium text-green-800">14-day money-back guarantee</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-export default function Checkout() {
+function CheckoutContent() {
   const [userEmail, setUserEmail] = useState('');
   const [onboardingData, setOnboardingData] = useState({ industry: '', websiteUrl: '' });
   const [mounted, setMounted] = useState(false);
   const [plan, setPlan] = useState('evidah_q');
   const [billingPeriod, setBillingPeriod] = useState('monthly');
   const [selectedCompany, setSelectedCompany] = useState('default');
-  const { theme, resolvedTheme } = useTheme();
+  const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0 });
   const searchParams = useSearchParams();
+
+  // Force body overflow auto only on this page
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'auto';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  // Countdown timer
+  useEffect(() => {
+    const calculateTimeLeft = () => {
+      const now = new Date();
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      const difference = endOfDay.getTime() - now.getTime();
+      
+      if (difference > 0) {
+        return {
+          hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
+          minutes: Math.floor((difference / 1000 / 60) % 60),
+          seconds: Math.floor((difference / 1000) % 60)
+        };
+      }
+      
+      return { hours: 0, minutes: 0, seconds: 0 };
+    };
+
+    setTimeLeft(calculateTimeLeft());
+
+    const timer = setInterval(() => {
+      setTimeLeft(calculateTimeLeft());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     setMounted(true);
     
-    // Get query parameters
     const planParam = searchParams.get('plan') || 'evidah_q';
     const billingParam = searchParams.get('billing') || 'monthly';
     const companyParam = searchParams.get('company') || 'default';
@@ -509,20 +520,17 @@ export default function Checkout() {
     setBillingPeriod(billingParam);
     setSelectedCompany(companyParam);
     
-    // Get user email from Firebase Auth
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user && user.email) {
         setUserEmail(user.email);
       }
     });
 
-    // Get onboarding data from localStorage
     if (typeof window !== 'undefined') {
       const industry = localStorage.getItem('onboarding_industry') || '';
       const websiteUrl = localStorage.getItem('onboarding_websiteUrl') || '';
       setOnboardingData({ industry, websiteUrl });
       
-      // Store selectedCompany in localStorage
       localStorage.setItem('selectedCompany', companyParam);
     }
 
@@ -537,7 +545,7 @@ export default function Checkout() {
   
   if (!publishableKey) {
     return (
-      <main className="bg-white dark:bg-gray-900 min-h-screen flex items-center justify-center">
+      <main className="light bg-white min-h-screen flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-500">Stripe publishable key not configured</p>
         </div>
@@ -548,41 +556,48 @@ export default function Checkout() {
   const stripePromise = loadStripe(publishableKey);
 
   return (
-    <main className="bg-white dark:bg-gray-900 min-h-screen">
-      {/* Header Banner */}
-      <div className="bg-violet-600 text-white py-2 px-4 flex items-center justify-between text-sm">
-        <span>Use Code: EVIDAH40</span>
-        <span>14:07:28</span>
+    <main className="light bg-gray-50 min-h-screen">
+      {/* Promotional Banner */}
+      <div className="bg-violet-600 text-white">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd" />
+              </svg>
+              <span className="font-medium">Limited Time Offer: Use code <span className="font-bold">EVIDAH40</span> for 40% off</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="font-mono font-semibold">
+                {String(timeLeft.hours).padStart(2, '0')}:{String(timeLeft.minutes).padStart(2, '0')}:{String(timeLeft.seconds).padStart(2, '0')}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center">
-            {mounted ? (
-              <Image
-                src={resolvedTheme === 'dark' ? '/dark-mode-logo.png' : '/light-mode-logo.png'}
-                alt="Evidah Logo"
-                width={120}
-                height={40}
-                priority
-              />
-            ) : (
-              <Image
-                src="/light-mode-logo.png"
-                alt="Evidah Logo"
-                width={120}
-                height={40}
-                priority
-              />
-            )}
-            <span className="text-lg text-gray-800 dark:text-gray-300">Checkout</span>
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <Image
+              src="/light-mode-logo.png"
+              alt="Evidah Logo"
+              width={140}
+              height={45}
+              priority
+            />
+            <a href="/sign-in" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
+              Sign in
+            </a>
           </div>
-          <a href="/sign-in" className="text-sm text-violet-500 hover:text-violet-600">
-            Already have an account? Login
-          </a>
         </div>
+      </div>
 
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <Elements stripe={stripePromise}>
           <CheckoutForm 
             userEmail={userEmail} 
@@ -594,5 +609,19 @@ export default function Checkout() {
         </Elements>
       </div>
     </main>
+  );
+}
+
+export default function Checkout() {
+  return (
+    <Suspense fallback={
+      <main className="light bg-gray-50 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </main>
+    }>
+      <CheckoutContent />
+    </Suspense>
   );
 }

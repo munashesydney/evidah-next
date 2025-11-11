@@ -140,7 +140,7 @@ export default function SimpleLineChart({ data, width, height, hideAxes = false,
                 tickLine={false}
                 axisLine={{ stroke: colors.gray300 }}
                 width={40}
-                tickFormatter={(value) => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
+                tickFormatter={(value: number) => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
               />
             </>
           )}
@@ -153,7 +153,7 @@ export default function SimpleLineChart({ data, width, height, hideAxes = false,
                 boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
                 padding: '0.5rem'
               }}
-              labelFormatter={(label) => `Date: ${label}`}
+              labelFormatter={(label: string | number) => `Date: ${label}`}
               formatter={(value: any, name: string) => {
                 // Format the value and the series name
                 return [value, name === 'value0' ? 'Current' : 'Previous'];

@@ -8,14 +8,28 @@ import { Item } from "@/lib/chat/assistant";
 import LoadingMessage from "./loading-message";
 import useConversationStore from "@/stores/chat/useConversationStore";
 
+interface Employee {
+  id: string
+  name: string
+  role: string
+  avatar: string
+  theme: {
+    primary: string
+    gradient: string
+  }
+  capabilities?: string[]
+}
+
 interface ChatProps {
   items: Item[];
   onSendMessage: (message: string) => void;
+  employee?: Employee;
 }
 
 const Chat: React.FC<ChatProps> = ({
   items,
   onSendMessage,
+  employee,
 }) => {
   const itemsEndRef = useRef<HTMLDivElement>(null);
   const [inputMessageText, setinputMessageText] = useState<string>("");
@@ -53,7 +67,7 @@ const Chat: React.FC<ChatProps> = ({
                   <ToolCall toolCall={item} />
                 ) : item.type === "message" ? (
                   <div className="flex flex-col gap-1">
-                    <Message message={item} />
+                    <Message message={item} employee={employee} />
                     {item.content &&
                       item.content[0].annotations &&
                       item.content[0].annotations.length > 0 && (
@@ -65,7 +79,7 @@ const Chat: React.FC<ChatProps> = ({
                 ) : null}
               </React.Fragment>
             ))}
-            {isAssistantLoading && <LoadingMessage />}
+            {isAssistantLoading && <LoadingMessage employee={employee} />}
             <div ref={itemsEndRef} />
           </div>
         </div>

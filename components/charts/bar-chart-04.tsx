@@ -93,7 +93,7 @@ export default function BarChart04({
           tooltip: {
             callbacks: {
               title: () => '', // Disable tooltip title
-              label: (context) => formatThousands(context.parsed.x),
+              label: (context) => formatThousands(context.parsed.x ?? 0),
             },
             bodyColor: darkMode ? tooltipBodyColor.dark : tooltipBodyColor.light,
             backgroundColor: darkMode ? tooltipBgColor.dark : tooltipBgColor.light,

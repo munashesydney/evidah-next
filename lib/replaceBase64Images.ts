@@ -99,7 +99,7 @@ export const replaceBase64Images = async ({
 
   let index = 0;
 
-  for (const dataUrl of dataUrls) {
+  for (const dataUrl of Array.from(dataUrls)) {
     const match = dataUrl.match(dataUrlRegex);
     if (!match) {
       continue;
@@ -127,7 +127,7 @@ export const replaceBase64Images = async ({
     const attrs = Array.from(element.attributes);
 
     attrs.forEach((attr) => {
-      for (const [dataUrl, downloadUrl] of dataUrlToRemoteUrl.entries()) {
+      for (const [dataUrl, downloadUrl] of Array.from(dataUrlToRemoteUrl.entries())) {
         if (attr.value.includes(dataUrl)) {
           if (attr.name === 'data-url' || attr.name.startsWith('data-')) {
             element.removeAttribute(attr.name);
@@ -152,7 +152,7 @@ export const replaceBase64Images = async ({
   let sanitizedHtml = doc.body.innerHTML;
   let sanitizedMarkdown = markdown;
 
-  for (const [dataUrl, downloadUrl] of dataUrlToRemoteUrl.entries()) {
+  for (const [dataUrl, downloadUrl] of Array.from(dataUrlToRemoteUrl.entries())) {
     sanitizedHtml = sanitizedHtml.split(dataUrl).join(downloadUrl);
     sanitizedMarkdown = sanitizedMarkdown.split(dataUrl).join(downloadUrl);
   }

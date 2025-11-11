@@ -123,6 +123,7 @@ export const handleTurn = async (
 
 export const processMessages = async (uid?: string, selectedCompany?: string, employeeId?: string, personalityLevel: number = 2) => {
   console.log(`[ASSISTANT] processMessages called with uid: ${uid}, selectedCompany: ${selectedCompany}, employeeId: ${employeeId}, personalityLevel: ${personalityLevel}`);
+  console.log(`[ASSISTANT] Stack trace:`, new Error().stack);
   
   const {
     chatMessages,
@@ -297,7 +298,7 @@ export const processMessages = async (uid?: string, selectedCompany?: string, em
             toolCallMessage.tool_type === "function_call"
           ) {
             // Handle tool call (execute function)
-            console.log('🔧 Executing tool:', toolCallMessage.name);
+            console.log('🔧 Executing tool:', toolCallMessage.name, 'with uid:', uid, 'selectedCompany:', selectedCompany);
             const toolResult = await handleTool(
               toolCallMessage.name as keyof typeof functionsMap,
               toolCallMessage.parsedArguments,

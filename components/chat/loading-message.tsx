@@ -12,11 +12,23 @@ interface Employee {
   capabilities?: string[]
 }
 
+const defaultEmployee: Employee = {
+  id: 'assistant',
+  name: 'Assistant',
+  role: 'AI Assistant',
+  avatar: '',
+  theme: {
+    primary: '#6366F1',
+    gradient: 'from-indigo-500 to-indigo-600',
+  },
+  capabilities: [],
+};
+
 interface LoadingMessageProps {
-  employee: Employee;
+  employee?: Employee;
 }
 
-const LoadingMessage: React.FC<LoadingMessageProps> = ({ employee }) => {
+const LoadingMessage: React.FC<LoadingMessageProps> = ({ employee = defaultEmployee }) => {
   // Get dot color based on employee
   const getDotColor = () => {
     const id = employee.id

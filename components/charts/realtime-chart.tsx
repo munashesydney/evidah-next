@@ -94,7 +94,7 @@ export default function RealtimeChart({
               weight: 600,
             },
             callbacks: {
-              label: (context) => formatValue(context.parsed.y),
+              label: (context) => formatValue(context.parsed.y ?? 0),
             },
             titleColor: darkMode ? tooltipTitleColor.dark : tooltipTitleColor.light,
             bodyColor: darkMode ? tooltipBodyColor.dark : tooltipBodyColor.light,

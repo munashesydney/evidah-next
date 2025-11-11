@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -8,7 +8,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import Image from 'next/image';
 import { useTheme } from 'next-themes';
 
-export default function Onboarding09() {
+function Onboarding09Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { theme, resolvedTheme } = useTheme();
@@ -719,5 +719,19 @@ export default function Onboarding09() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function Onboarding09() {
+  return (
+    <Suspense fallback={
+      <main className="bg-white dark:bg-gray-900 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+        </div>
+      </main>
+    }>
+      <Onboarding09Content />
+    </Suspense>
   );
 }

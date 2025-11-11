@@ -112,9 +112,9 @@ export default function ChatSelectionPage() {
                   </p>
                 </div>
 
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 line-clamp-3">
+                {/*<p className="text-xs text-gray-500 dark:text-gray-400 mb-4 line-clamp-3">
                   {employee.description}
-                </p>
+                </p>*/}
 
                 {/* Start Chat button */}
                 <div className="mt-auto">

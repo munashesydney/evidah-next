@@ -14,12 +14,24 @@ interface Employee {
   capabilities?: string[]
 }
 
+const defaultEmployee: Employee = {
+  id: 'assistant',
+  name: 'Assistant',
+  role: 'AI Assistant',
+  avatar: '',
+  theme: {
+    primary: '#6366F1',
+    gradient: 'from-indigo-500 to-indigo-600',
+  },
+  capabilities: [],
+};
+
 interface MessageProps {
   message: MessageItem;
-  employee: Employee;
+  employee?: Employee;
 }
 
-const Message: React.FC<MessageProps> = ({ message, employee }) => {
+const Message: React.FC<MessageProps> = ({ message, employee = defaultEmployee }) => {
   const isUser = message.role === "user";
   
   return (

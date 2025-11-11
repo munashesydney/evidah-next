@@ -21,6 +21,10 @@ const employeeSpecificFunctions = [
   'disable_ticket_ai',
   'get_emails',
   'send_email',
+  'get_helpdesk_settings',
+  'update_helpdesk_settings',
+  'update_helpdesk_ai_suggestions',
+  'update_helpdesk_ai_messages',
   'get_live_chat_sessions',
   'get_live_chat_session',
   'get_live_chat_settings',
@@ -62,10 +66,11 @@ export const handleTool = async (
   uid?: string,
   selectedCompany?: string
 ) => {
-  console.log("Handle tool", toolName, parameters);
+  console.log("[HANDLE TOOL] Tool:", toolName, "| Parameters:", parameters, "| uid:", uid, "| selectedCompany:", selectedCompany);
   if (functionsMap[toolName]) {
     // For employee-specific functions, inject uid and selectedCompany
     if (employeeSpecificFunctions.includes(toolName as any) && uid && selectedCompany) {
+      console.log("[HANDLE TOOL] ✅ Injecting uid and selectedCompany for", toolName);
       return await functionsMap[toolName]({
         ...parameters,
         uid,
@@ -73,6 +78,7 @@ export const handleTool = async (
       });
     }
     // For shared functions, call as-is
+    console.log("[HANDLE TOOL] ⚠️ Calling", toolName, "without injection. Is employee-specific?", employeeSpecificFunctions.includes(toolName as any), "| Has uid?", !!uid, "| Has selectedCompany?", !!selectedCompany);
     return await functionsMap[toolName](parameters);
   } else {
     throw new Error(`Unknown tool: ${toolName}`);
