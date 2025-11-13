@@ -22,6 +22,7 @@ export default function Onboarding() {
   const [emailLoading, setEmailLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [awaitingVerification, setAwaitingVerification] = useState(false);
+  const [isSmallScreen, setIsSmallScreen] = useState(false);
   const router = useRouter();
 
   const industries = [
@@ -37,17 +38,17 @@ export default function Onboarding() {
   ];
 
   const handleNext = () => {
-    if (currentStep === 3) {
-      // Handle substeps within step 3
+    if (currentStep === 4) {
+      // Handle substeps within step 4 (Meet the Team)
       if (currentSubstep < 4) {
         setCurrentSubstep(currentSubstep + 1);
       } else {
-        // Move to step 4 after substep 4
-        setCurrentStep(4);
+        // After step 4, redirect to checkout
+        router.push('/checkout');
       }
     } else if (currentStep < 4) {
-      if (currentStep === 2) {
-        // Reset substep when entering step 3 from step 2
+      if (currentStep === 3) {
+        // Reset substep when entering step 4 from step 3
         setCurrentSubstep(1);
       }
       setCurrentStep(currentStep + 1);
@@ -57,28 +58,38 @@ export default function Onboarding() {
   // If a user is already signed in and visits onboarding, redirect appropriately
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser) return;
+      if (!currentUser) {
+        // If not signed in and trying to access steps 2-4, redirect to step 1
+        if (currentStep > 1) {
+          setCurrentStep(1);
+        }
+        return;
+      }
       
       // If email is not verified, don't redirect (let them complete verification flow)
       if (!currentUser.emailVerified) {
         return;
       }
       
+      // If signed in and verified, skip step 1 (sign up) and go to step 2
+      if (currentStep === 1) {
+        setCurrentStep(2);
+      }
+      
       try {
         const userDocRef = doc(db, 'users', currentUser.uid);
         const userDoc = await getDoc(userDocRef);
         if (userDoc.exists()) {
+          // User already completed onboarding, redirect to chat
           router.push('/default/chat');
-        } else {
-          router.push('/checkout');
         }
+        // Otherwise, continue with onboarding from step 2
       } catch (e) {
-        // Fail safe: send to checkout so they can complete setup
-        router.push('/checkout');
+        // Fail safe: continue with onboarding
       }
     });
     return () => unsubscribe();
-  }, [router]);
+  }, [router, currentStep]);
 
   // Force body overflow auto only on this page
   useEffect(() => {
@@ -88,6 +99,20 @@ export default function Onboarding() {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
+  }, []);
+
+  // Check screen size for autoFocus
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const checkScreenSize = () => {
+      setIsSmallScreen(window.innerWidth < 640); // Tailwind's sm breakpoint
+    };
+    
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    
+    return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
   // Restore onboarding progress from localStorage (step, substep, email flow step)
@@ -134,13 +159,13 @@ export default function Onboarding() {
   }, [email]);
 
   const handleBack = () => {
-    if (currentStep === 3) {
-      // Handle substeps within step 3
+    if (currentStep === 4) {
+      // Handle substeps within step 4 (Meet the Team)
       if (currentSubstep > 1) {
         setCurrentSubstep(currentSubstep - 1);
       } else {
-        // Move back to step 2 from substep 1
-        setCurrentStep(2);
+        // Move back to step 3 from substep 1
+        setCurrentStep(3);
       }
     } else if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
@@ -162,8 +187,9 @@ export default function Onboarding() {
       }
       
       // Account created/signed in successfully
-      // Redirect to checkout
-      router.push('/checkout');
+      // Continue to step 2 (Industry Selection)
+      setCurrentStep(2);
+      setLoading(false);
     } catch (error: any) {
       console.error('Google sign-in error:', error);
       setError(error.message || 'Failed to sign in with Google. Please try again.');
@@ -186,8 +212,9 @@ export default function Onboarding() {
       }
       
       // Account created/signed in successfully
-      // Redirect to checkout
-      router.push('/checkout');
+      // Continue to step 2 (Industry Selection)
+      setCurrentStep(2);
+      setAppleLoading(false);
     } catch (error: any) {
       console.error('Apple sign-in error:', error);
       setError(error.message || 'Failed to sign in with Apple. Please try again.');
@@ -255,9 +282,9 @@ export default function Onboarding() {
       const updatedUser = auth.currentUser;
 
       if (updatedUser?.emailVerified) {
-        // Email verified, clear the awaiting flag and redirect to checkout
+        // Email verified, clear the awaiting flag and continue to step 2
         setAwaitingVerification(false);
-        router.push('/checkout');
+        setCurrentStep(2);
       } else {
         setError('Email not verified yet. Please check your inbox and click the verification link.');
         setVerifying(false);
@@ -339,8 +366,231 @@ export default function Onboarding() {
         {/* Content Card */}
         <div className="w-full max-w-md">
           <div className="bg-white rounded-lg shadow-lg p-8 border border-gray-200">
-            {/* Step 1: Industry Selection */}
+            {/* Step 1: Sign up */}
             {currentStep === 1 && (
+              <div>
+                <h1 className="text-2xl text-gray-900 font-bold mb-2">
+                  Let's get you started
+                </h1>
+                <p className="text-gray-700 leading-relaxed mb-6">Get your AI Employees today.</p>
+
+                {error && (
+                  <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                )}
+
+                {/* Email/Password Sign In */}
+                {emailStep === 'email' && (
+                  <div className="mb-4">
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium mb-2 text-gray-900">
+                        Email Address
+                      </label>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleEmailNext();
+                          }
+                        }}
+                        placeholder="you@example.com"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent text-gray-900"
+                        autoFocus={!isSmallScreen}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleEmailNext}
+                      className="w-full py-3 px-6 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 transition-colors"
+                    >
+                      Continue
+                    </button>
+                  </div>
+                )}
+
+                {emailStep === 'password' && (
+                  <div className="mb-4">
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium mb-2 text-gray-900">
+                        Password
+                      </label>
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handlePasswordSubmit();
+                          }
+                        }}
+                        placeholder="At least 6 characters"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent text-gray-900"
+                        autoFocus
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmailStep('email');
+                          setPassword('');
+                        }}
+                        className="flex-1 py-3 px-6 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
+                      >
+                        Back
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handlePasswordSubmit}
+                        disabled={emailLoading}
+                        className="flex-1 py-3 px-6 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {emailLoading ? 'Creating account...' : 'Create Account'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {emailStep === 'verification' && (
+                  <div className="mb-4">
+                    <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        <div className="flex-1">
+                          <h3 className="text-sm font-semibold text-blue-900 mb-1">Verification email sent!</h3>
+                          <p className="text-sm text-blue-700">
+                            We've sent a verification email to <span className="font-medium">{email}</span>. Please check your inbox and click the verification link to continue.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleVerifyEmail}
+                      disabled={verifying}
+                      className="w-full py-3 px-6 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {verifying ? (
+                        <span className="flex items-center justify-center">
+                          <svg
+                            className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Verifying...
+                        </span>
+                      ) : (
+                        'Confirm Verification'
+                      )}
+                    </button>
+                    <p className="text-xs text-gray-500 text-center mt-3">
+                      Didn't receive the email? Check your spam folder or try again.
+                    </p>
+                  </div>
+                )}
+
+                {/* Divider - Only show if not in verification step */}
+                {emailStep === 'email' && (
+                  <>
+                    <div className="relative mb-4">
+                      <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                        <div className="w-full border-t border-gray-200"></div>
+                      </div>
+                      <div className="relative flex justify-center text-sm">
+                        <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                      </div>
+                    </div>
+
+                    {/* Sign In Buttons */}
+                    <div className="mb-4 space-y-3">
+                      <button
+                        type="button"
+                        onClick={handleGoogleSignIn}
+                        disabled={loading || appleLoading || emailLoading}
+                        className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {loading ? (
+                          <>
+                            <svg
+                              className="animate-spin fill-current shrink-0 w-5 h-5"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 16 16"
+                            >
+                              <path d="M8 16a7.928 7.928 0 01-3.428-.77l.857-1.807A6.006 6.006 0 0014 8c0-3.309-2.691-6-6-6a6.006 6.006 0 00-5.422 8.572l-1.806.859A7.929 7.929 0 010 8c0-4.411 3.589-8 8-8s8 3.589 8 8-3.589 8-8 8z" />
+                            </svg>
+                            <span className="font-medium">Signing in...</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-5 h-5" viewBox="0 0 24 24">
+                              <path
+                                fill="#4285F4"
+                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                              />
+                              <path
+                                fill="#34A853"
+                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                              />
+                              <path
+                                fill="#FBBC05"
+                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                              />
+                              <path
+                                fill="#EA4335"
+                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                              />
+                            </svg>
+                            <span className="font-medium">Continue with Google</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleAppleSignIn}
+                        disabled={loading || appleLoading || emailLoading}
+                        className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-300 rounded-lg bg-black text-white hover:bg-gray-900 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {appleLoading ? (
+                          <>
+                            <svg
+                              className="animate-spin fill-current shrink-0 w-5 h-5"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 16 16"
+                            >
+                              <path d="M8 16a7.928 7.928 0 01-3.428-.77l.857-1.807A6.006 6.006 0 0014 8c0-3.309-2.691-6-6-6a6.006 6.006 0 00-5.422 8.572l-1.806.859A7.929 7.929 0 010 8c0-4.411 3.589-8 8-8s8 3.589 8 8-3.589 8-8 8z" />
+                            </svg>
+                            <span className="font-medium">Signing in...</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C1.79 13.1 4.54 5.38 9.5 5.07c1.35.08 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 4.9c-.15-2.23 1.66-4.07 3.74-4.59.44 2.24-1.99 4.46-3.74 4.59z"/>
+                            </svg>
+                            <span className="font-medium">Continue with Apple</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Step 2: Industry Selection */}
+            {currentStep === 2 && (
               <div>
                 <h1 className="text-2xl text-gray-900 font-bold mb-6">
                   What industry are you in?
@@ -363,7 +613,13 @@ export default function Onboarding() {
                     </label>
                   ))}
                 </div>
-                <div className="flex justify-end">
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={handleBack}
+                    className="py-3 px-6 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    ← Back
+                  </button>
                   <button
                     onClick={handleNext}
                     disabled={!industry}
@@ -375,8 +631,8 @@ export default function Onboarding() {
               </div>
             )}
 
-            {/* Step 2: Website URL */}
-            {currentStep === 2 && (
+            {/* Step 3: Website URL */}
+            {currentStep === 3 && (
               <div>
                 <h1 className="text-2xl text-gray-900 font-bold mb-6">
                   What's your website URL?
@@ -415,10 +671,10 @@ export default function Onboarding() {
               </div>
             )}
 
-            {/* Step 3: Meet the Team (with substeps) */}
-            {currentStep === 3 && (
+            {/* Step 4: Meet the Team (with substeps) */}
+            {currentStep === 4 && (
               <div>
-                {/* Step 3 Title */}
+                {/* Step 4 Title */}
                 <h1 className="text-2xl text-gray-900 font-bold mb-6">
                   Meet Your Employees
                 </h1>
@@ -641,274 +897,6 @@ export default function Onboarding() {
               </div>
             )}
 
-            {/* Step 4: Sign in with Google */}
-            {currentStep === 4 && (
-              <div className="text-center">
-                {/* Celebration Icon */}
-                <div className="mb-6 flex justify-center">
-                  <div>
-                    <Image
-                      src="/simple_logo.png"
-                      alt="Evidah Logo"
-                      width={56}
-                      height={56}
-                      className="w-full h-full object-contain"
-                      priority
-                    />
-                  </div>
-                </div>
-
-                {/* Congratulatory Message */}
-                <div className="mb-4">
-                  <p className="text-sm font-semibold text-violet-600 uppercase tracking-wide mb-2">
-                    You Made It!
-                  </p>
-                  <h1 className="text-3xl text-gray-900 font-bold mb-3">
-                    Congratulations! 🎉
-                  </h1>
-                  <p className="text-gray-600 text-base leading-relaxed">
-                    <span className="font-semibold text-gray-900">70% of people don't make it here.</span> You're one of the few who's ready to transform their business with AI.
-                  </p>
-                </div>
-
-                {/* Value Proposition */}
-                <div className="mb-8 p-4 bg-violet-50 rounded-lg border border-violet-100">
-                  <p className="text-sm text-gray-700 leading-relaxed">
-                    <span className="font-semibold text-violet-700">Let's get you started.</span> Join thousands of businesses already using AI to automate support, engage customers, and scale effortlessly.
-                  </p>
-                </div>
-
-                {error && (
-                  <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-sm text-red-700">{error}</p>
-                  </div>
-                )}
-
-                {/* Email/Password Sign In */}
-                {emailStep === 'email' && (
-                  <div className="mb-4">
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium mb-2 text-gray-900 text-left">
-                        Email Address
-                      </label>
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handleEmailNext();
-                          }
-                        }}
-                        placeholder="you@example.com"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent text-gray-900"
-                        autoFocus
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleEmailNext}
-                      className="w-full py-3 px-6 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 transition-colors"
-                    >
-                      Continue
-                    </button>
-                  </div>
-                )}
-
-                {emailStep === 'password' && (
-                  <div className="mb-4">
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium mb-2 text-gray-900 text-left">
-                        Password
-                      </label>
-                      <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handlePasswordSubmit();
-                          }
-                        }}
-                        placeholder="At least 6 characters"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent text-gray-900"
-                        autoFocus
-                      />
-                      <p className="text-xs text-gray-500 mt-1 text-left">Minimum 6 characters</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEmailStep('email');
-                          setPassword('');
-                        }}
-                        className="flex-1 py-3 px-6 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
-                      >
-                        Back
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handlePasswordSubmit}
-                        disabled={emailLoading}
-                        className="flex-1 py-3 px-6 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {emailLoading ? 'Creating account...' : 'Create Account'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {emailStep === 'verification' && (
-                  <div className="mb-4">
-                    <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                      <div className="flex items-start gap-3">
-                        <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                        <div className="flex-1">
-                          <h3 className="text-sm font-semibold text-blue-900 mb-1">Verification email sent!</h3>
-                          <p className="text-sm text-blue-700">
-                            We've sent a verification email to <span className="font-medium">{email}</span>. Please check your inbox and click the verification link to continue.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleVerifyEmail}
-                      disabled={verifying}
-                      className="w-full py-3 px-6 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {verifying ? (
-                        <span className="flex items-center justify-center">
-                          <svg
-                            className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Verifying...
-                        </span>
-                      ) : (
-                        'Confirm Verification'
-                      )}
-                    </button>
-                    <p className="text-xs text-gray-500 text-center mt-3">
-                      Didn't receive the email? Check your spam folder or try again.
-                    </p>
-                  </div>
-                )}
-
-                {/* Divider - Only show if not in verification step */}
-                {emailStep === 'email' && (
-                  <>
-                    <div className="relative mb-4">
-                      <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                        <div className="w-full border-t border-gray-200"></div>
-                      </div>
-                      <div className="relative flex justify-center text-sm">
-                        <span className="px-2 bg-white text-gray-500">Or continue with</span>
-                      </div>
-                    </div>
-
-                    {/* Sign In Buttons */}
-                    <div className="mb-4 space-y-3">
-                      <button
-                        type="button"
-                        onClick={handleGoogleSignIn}
-                        disabled={loading || appleLoading || emailLoading}
-                        className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {loading ? (
-                          <>
-                            <svg
-                              className="animate-spin fill-current shrink-0 w-5 h-5"
-                              width="16"
-                              height="16"
-                              viewBox="0 0 16 16"
-                            >
-                              <path d="M8 16a7.928 7.928 0 01-3.428-.77l.857-1.807A6.006 6.006 0 0014 8c0-3.309-2.691-6-6-6a6.006 6.006 0 00-5.422 8.572l-1.806.859A7.929 7.929 0 010 8c0-4.411 3.589-8 8-8s8 3.589 8 8-3.589 8-8 8z" />
-                            </svg>
-                            <span className="font-medium">Signing in...</span>
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-5 h-5" viewBox="0 0 24 24">
-                              <path
-                                fill="#4285F4"
-                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                              />
-                              <path
-                                fill="#34A853"
-                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                              />
-                              <path
-                                fill="#FBBC05"
-                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                              />
-                              <path
-                                fill="#EA4335"
-                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                              />
-                            </svg>
-                            <span className="font-medium">Continue with Google</span>
-                          </>
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleAppleSignIn}
-                        disabled={loading || appleLoading || emailLoading}
-                        className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-300 rounded-lg bg-black text-white hover:bg-gray-900 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {appleLoading ? (
-                          <>
-                            <svg
-                              className="animate-spin fill-current shrink-0 w-5 h-5"
-                              width="16"
-                              height="16"
-                              viewBox="0 0 16 16"
-                            >
-                              <path d="M8 16a7.928 7.928 0 01-3.428-.77l.857-1.807A6.006 6.006 0 0014 8c0-3.309-2.691-6-6-6a6.006 6.006 0 00-5.422 8.572l-1.806.859A7.929 7.929 0 010 8c0-4.411 3.589-8 8-8s8 3.589 8 8-3.589 8-8 8z" />
-                            </svg>
-                            <span className="font-medium">Signing in...</span>
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C1.79 13.1 4.54 5.38 9.5 5.07c1.35.08 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 4.9c-.15-2.23 1.66-4.07 3.74-4.59.44 2.24-1.99 4.46-3.74 4.59z"/>
-                            </svg>
-                            <span className="font-medium">Continue with Apple</span>
-                          </>
-                        )}
-                      </button>
-                      
-                      <p className="text-xs text-gray-500 text-center mt-2">
-                        Quick, secure, and free to get started
-                      </p>
-                    </div>
-                  </>
-                )}
-
-                {/* Back Button - Less Prominent */}
-                {emailStep === 'email' && (
-                  <div className="flex justify-center">
-                    <button
-                      onClick={handleBack}
-                      disabled={loading || appleLoading || emailLoading}
-                      className="text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      ← Go back
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>
