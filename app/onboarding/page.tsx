@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { GoogleAuthProvider, OAuthProvider, onAuthStateChanged, signInWithPopup, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
@@ -585,6 +586,21 @@ export default function Onboarding() {
                       </button>
                     </div>
                   </>
+                )}
+
+                {/* Already have an account link */}
+                {emailStep === 'email' && (
+                  <div className="mt-6 text-center">
+                    <p className="text-sm text-gray-600">
+                      Already have an account?{' '}
+                      <Link
+                        href="/sign-in"
+                        className="font-medium text-violet-600 hover:text-violet-700"
+                      >
+                        Sign in
+                      </Link>
+                    </p>
+                  </div>
                 )}
               </div>
             )}

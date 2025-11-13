@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { signInWithEmailAndPassword, signInWithCustomToken, signInWithPopup, GoogleAuthProvider, OAuthProvider } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithCustomToken, signInWithPopup, GoogleAuthProvider, OAuthProvider, fetchSignInMethodsForEmail, linkWithCredential } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -25,7 +25,7 @@ export default function SignIn() {
       const user = result.user;
 
       // Check if user document exists in Firestore
-      const userDocRef = doc(db, 'users', user.uid);
+      const userDocRef = doc(db, 'Users', user.uid);
       const userDoc = await getDoc(userDocRef);
 
       if (userDoc.exists()) {
@@ -37,7 +37,52 @@ export default function SignIn() {
       }
     } catch (error: any) {
       console.error('Google sign-in error:', error);
-      setErrorMessage('Failed to sign in with Google. Please try again.');
+      
+      // Handle account exists with different credential
+      if (error.code === 'auth/account-exists-with-different-credential') {
+        const email = error.customData?.email;
+        const pendingCredential = error.credential;
+        
+        if (email && pendingCredential) {
+          try {
+            // Fetch sign-in methods for this email
+            const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+            
+            // Check if user is already signed in
+            const currentUser = auth.currentUser;
+            
+            if (currentUser && currentUser.email === email) {
+              // User is already signed in, link the Google account
+              try {
+                await linkWithCredential(currentUser, pendingCredential);
+                
+                // Successfully linked, redirect
+                const userDocRef = doc(db, 'Users', currentUser.uid);
+                const userDoc = await getDoc(userDocRef);
+                router.push(userDoc.exists() ? '/default/chat' : '/checkout');
+                return;
+              } catch (linkError: any) {
+                console.error('Error linking Google account:', linkError);
+                setErrorMessage('Failed to link Google account. Please try signing out and signing in again.');
+              }
+            } else {
+              // User needs to sign in with existing provider first
+              const providerName = signInMethods.includes('apple.com') ? 'Apple' : 
+                                   signInMethods.includes('password') ? 'email/password' : 
+                                   'your existing account';
+              setErrorMessage(`An account with this email already exists. Please sign in with ${providerName} first, then you can link your Google account.`);
+            }
+          } catch (fetchError) {
+            console.error('Error fetching sign-in methods:', fetchError);
+            setErrorMessage('An account with this email already exists with a different sign-in method. Please use your original sign-in method.');
+          }
+        } else {
+          setErrorMessage('An account with this email already exists with a different sign-in method. Please use your original sign-in method.');
+        }
+      } else {
+        setErrorMessage('Failed to sign in with Google. Please try again.');
+      }
+      
       setGoogleLoading(false);
     }
   };
@@ -52,7 +97,7 @@ export default function SignIn() {
       const user = result.user;
 
       // Check if user document exists in Firestore
-      const userDocRef = doc(db, 'users', user.uid);
+      const userDocRef = doc(db, 'Users', user.uid);
       const userDoc = await getDoc(userDocRef);
 
       if (userDoc.exists()) {
@@ -62,7 +107,52 @@ export default function SignIn() {
       }
     } catch (error: any) {
       console.error('Apple sign-in error:', error);
-      setErrorMessage('Failed to sign in with Apple. Please try again.');
+      
+      // Handle account exists with different credential
+      if (error.code === 'auth/account-exists-with-different-credential') {
+        const email = error.customData?.email;
+        const pendingCredential = error.credential;
+        
+        if (email && pendingCredential) {
+          try {
+            // Fetch sign-in methods for this email
+            const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+            
+            // Check if user is already signed in
+            const currentUser = auth.currentUser;
+            
+            if (currentUser && currentUser.email === email) {
+              // User is already signed in, link the Apple account
+              try {
+                await linkWithCredential(currentUser, pendingCredential);
+                
+                // Successfully linked, redirect
+                const userDocRef = doc(db, 'Users', currentUser.uid);
+                const userDoc = await getDoc(userDocRef);
+                router.push(userDoc.exists() ? '/default/chat' : '/checkout');
+                return;
+              } catch (linkError: any) {
+                console.error('Error linking Apple account:', linkError);
+                setErrorMessage('Failed to link Apple account. Please try signing out and signing in again.');
+              }
+            } else {
+              // User needs to sign in with existing provider first
+              const providerName = signInMethods.includes('google.com') ? 'Google' : 
+                                   signInMethods.includes('password') ? 'email/password' : 
+                                   'your existing account';
+              setErrorMessage(`An account with this email already exists. Please sign in with ${providerName} first, then you can link your Apple account.`);
+            }
+          } catch (fetchError) {
+            console.error('Error fetching sign-in methods:', fetchError);
+            setErrorMessage('An account with this email already exists with a different sign-in method. Please use your original sign-in method.');
+          }
+        } else {
+          setErrorMessage('An account with this email already exists with a different sign-in method. Please use your original sign-in method.');
+        }
+      } else {
+        setErrorMessage('Failed to sign in with Apple. Please try again.');
+      }
+      
       setAppleLoading(false);
     }
   };
@@ -113,6 +203,26 @@ export default function SignIn() {
     } catch (error: any) {
       console.error('Admin login failed, trying agent login:', error);
 
+      // Check if account exists with different provider
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        try {
+          const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+          
+          if (signInMethods.length > 0 && !signInMethods.includes('password')) {
+            // Account exists but not with email/password
+            const providerName = signInMethods.includes('google.com') ? 'Google' : 
+                                 signInMethods.includes('apple.com') ? 'Apple' : 
+                                 'a social provider';
+            setErrorMessage(`An account with this email already exists. Please sign in with ${providerName} instead.`);
+            setLoading(false);
+            return;
+          }
+        } catch (fetchError) {
+          // If we can't fetch sign-in methods, continue with normal error handling
+          console.error('Error fetching sign-in methods:', fetchError);
+        }
+      }
+
       // Try agent login
       try {
         const response = await fetch('/api/auth/loginuser', {
@@ -132,6 +242,25 @@ export default function SignIn() {
         }
       } catch (postError: any) {
         console.error('Agent login error:', postError);
+        
+        // Check again for account with different provider in agent login error
+        if (postError.code === 'auth/user-not-found' || postError.code === 'auth/wrong-password') {
+          try {
+            const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+            
+            if (signInMethods.length > 0 && !signInMethods.includes('password')) {
+              const providerName = signInMethods.includes('google.com') ? 'Google' : 
+                                   signInMethods.includes('apple.com') ? 'Apple' : 
+                                   'a social provider';
+              setErrorMessage(`An account with this email already exists. Please sign in with ${providerName} instead.`);
+              setLoading(false);
+              return;
+            }
+          } catch (fetchError) {
+            console.error('Error fetching sign-in methods:', fetchError);
+          }
+        }
+        
         setErrorMessage('Failed to log in. Please check your credentials.');
       }
     } finally {
