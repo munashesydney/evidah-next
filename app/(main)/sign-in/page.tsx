@@ -365,7 +365,7 @@ export default function SignIn() {
         >
           <Image
             className="object-cover object-center w-full h-full"
-            src="/auth-image.jpg"
+            src="/images/employees/charliebusy.png"
             width={760}
             height={1024}
             alt="Authentication"

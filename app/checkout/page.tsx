@@ -541,7 +541,12 @@ function CheckoutContent() {
     return null;
   }
 
-  const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST || process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_LIVE || '';
+  // Check STRIPE_MODE to determine which publishable key to use
+  const stripeMode = process.env.NEXT_PUBLIC_STRIPE_MODE || 'test';
+  const isLive = stripeMode === 'live';
+  const publishableKey = isLive 
+    ? (process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_LIVE || '')
+    : (process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST || '');
   
   if (!publishableKey) {
     return (
