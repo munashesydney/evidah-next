@@ -43,20 +43,32 @@ function CheckoutForm({ userEmail, onboardingData, plan, billingPeriod, selected
         monthly: 39,
         yearly: 348,
         monthlyEquivalent: billingPeriod === 'yearly' ? 29 : 39,
+        discountedMonthly: 23.40,
+        discountedYearly: 208.80,
       };
     } else {
       return {
         monthly: 29,
         yearly: 228,
         monthlyEquivalent: billingPeriod === 'yearly' ? 19 : 29,
+        discountedMonthly: 17.40,
+        discountedYearly: 136.80,
       };
     }
   };
 
   const pricing = getPricing();
   const basePrice = billingPeriod === 'yearly' ? pricing.yearly : pricing.monthly;
-  const subtotal = basePrice;
-  const total = subtotal - discount;
+  const discountedPrice = billingPeriod === 'yearly' ? pricing.discountedYearly : pricing.discountedMonthly;
+  
+  // New pricing structure: 3 days free, then $1, then discounted/full, then full
+  const freeTrialPrice = 0.00;
+  const trialPrice = 1.00;
+  const secondMonthPrice = appliedCoupon ? discountedPrice : basePrice;
+  const regularPrice = basePrice;
+  
+  const subtotal = freeTrialPrice; // Free for 3 days
+  const total = freeTrialPrice;
   const monthlyEquivalent = pricing.monthlyEquivalent;
 
   useEffect(() => {
@@ -101,24 +113,12 @@ function CheckoutForm({ userEmail, onboardingData, plan, billingPeriod, selected
     if (!couponCode.trim()) return;
 
     try {
-      const response = await fetch('/api/stripe/apply-coupon', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          couponCode: couponCode.trim(),
-          billingPeriod: billingPeriod,
-          plan: plan
-        }),
-      });
-
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Invalid coupon code');
+      // Only accept EVIDAH40 for now
+      if (couponCode.trim().toUpperCase() !== 'EVIDAH40') {
+        throw new Error('Invalid coupon code');
       }
 
-      setAppliedCoupon(couponCode.trim().toUpperCase());
-      setDiscount(data.discountAmount);
+      setAppliedCoupon('EVIDAH40');
       setCouponCode('');
       setError('');
     } catch (err: any) {
@@ -425,23 +425,41 @@ function CheckoutForm({ userEmail, onboardingData, plan, billingPeriod, selected
 
           <div className="space-y-3 mb-6 pb-6 border-b border-gray-200">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Subtotal</span>
-              <span className="text-gray-900 font-medium">${subtotal.toFixed(2)}</span>
+              <span className="text-gray-600">First 3 days (free trial)</span>
+              <span className="text-gray-900 font-medium">FREE</span>
             </div>
-            {discount > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Discount</span>
-                <span className="text-green-600 font-medium">-${discount.toFixed(2)}</span>
-              </div>
-            )}
           </div>
 
           <div className="flex justify-between items-baseline mb-6">
             <span className="text-base font-semibold text-gray-900">Total due today</span>
             <div className="text-right">
-              <div className="text-2xl font-bold text-gray-900">${total.toFixed(2)}</div>
-              {billingPeriod === 'yearly' && (
-                <div className="text-xs text-gray-500 mt-1">${monthlyEquivalent}/month</div>
+              <div className="text-2xl font-bold text-gray-900">$0.00</div>
+              <div className="text-xs text-gray-500 mt-1">Free for 3 days</div>
+            </div>
+          </div>
+
+          {/* Pricing Breakdown */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <h3 className="text-sm font-semibold text-blue-900 mb-3">Pricing Breakdown</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-blue-800">Days 1-3:</span>
+                <span className="font-medium text-blue-900">FREE</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-blue-800">Days 4-30:</span>
+                <span className="font-medium text-blue-900">${trialPrice.toFixed(2)}</span>
+              </div>
+              {appliedCoupon && (
+                <div className="flex justify-between">
+                  <span className="text-blue-800">Month 2:</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-400 line-through">${regularPrice.toFixed(2)}</span>
+                    <span className="font-medium text-blue-900">
+                      ${secondMonthPrice.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -451,7 +469,7 @@ function CheckoutForm({ userEmail, onboardingData, plan, billingPeriod, selected
               <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span className="text-sm font-medium text-green-800">14-day money-back guarantee</span>
+              <span className="text-sm font-medium text-green-800">Cancel anytime during trial</span>
             </div>
           </div>
         </div>
@@ -570,7 +588,7 @@ function CheckoutContent() {
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd" />
               </svg>
-              <span className="font-medium">Limited Time Offer: Use code <span className="font-bold">EVIDAH40</span> for 40% off</span>
+              <span className="font-medium">Start FREE for 3 days! Use code <span className="font-bold">EVIDAH40</span> for 40% off month 2</span>
             </div>
             <div className="flex items-center gap-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

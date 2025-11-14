@@ -65,9 +65,17 @@ export async function POST(request: NextRequest) {
         await handleSubscriptionDeleted(event.data.object);
         break;
 
+      case 'subscription_schedule.updated':
+        await handleSubscriptionScheduleUpdated(event.data.object);
+        break;
+
+      case 'subscription_schedule.completed':
+        console.log('Subscription schedule completed:', event.data.object.id);
+        // Schedule released to normal subscription
+        break;
+
       case 'invoice.payment_succeeded':
-        console.log('Invoice payment succeeded:', event.data.object.id);
-        // Recurring payments - already handled by subscription
+        await handleInvoicePaymentSucceeded(event.data.object);
         break;
 
       case 'invoice.payment_failed':
@@ -202,6 +210,92 @@ async function handleSubscriptionDeleted(subscription: any) {
     console.log('Subscription canceled:', subscription.id, 'Employee:', employeeId, 'Access disabled');
   } catch (error: any) {
     console.error('Error handling subscription deletion:', error);
+  }
+}
+
+async function handleSubscriptionScheduleUpdated(schedule: any) {
+  try {
+    const customerId = schedule.customer;
+    const metadata = schedule.metadata || {};
+    const selectedCompany = metadata.selectedCompany || 'default';
+    
+    // Find user by customer ID
+    const usersSnapshot = await db.collection('Users')
+      .where('stripeCustomerId', '==', customerId)
+      .limit(1)
+      .get();
+
+    if (usersSnapshot.empty) {
+      console.error('User not found for customer:', customerId);
+      return;
+    }
+
+    const userDoc = usersSnapshot.docs[0];
+    const uid = userDoc.id;
+
+    // Update phase information in knowledgebase
+    const knowledgebaseRef = db.collection('Users').doc(uid).collection('knowledgebases').doc(selectedCompany);
+    
+    // Determine current phase from schedule
+    const currentPhase = schedule.current_phase;
+    let phaseType = 'trial';
+    
+    if (currentPhase && currentPhase.metadata) {
+      phaseType = currentPhase.metadata.phase || 'trial';
+    }
+    
+    await knowledgebaseRef.update({
+      'subscriptionData.currentPhase': phaseType,
+      'subscriptionData.updatedAt': Timestamp.now(),
+    });
+
+    console.log('Subscription schedule updated:', schedule.id, 'Phase:', phaseType);
+  } catch (error: any) {
+    console.error('Error handling subscription schedule update:', error);
+  }
+}
+
+async function handleInvoicePaymentSucceeded(invoice: any) {
+  try {
+    const customerId = invoice.customer;
+    const subscriptionId = invoice.subscription;
+    
+    if (!subscriptionId) {
+      return; // Not a subscription invoice
+    }
+
+    // Find user by customer ID
+    const usersSnapshot = await db.collection('Users')
+      .where('stripeCustomerId', '==', customerId)
+      .limit(1)
+      .get();
+
+    if (usersSnapshot.empty) {
+      console.error('User not found for customer:', customerId);
+      return;
+    }
+
+    const userDoc = usersSnapshot.docs[0];
+    const uid = userDoc.id;
+
+    // Get subscription to check metadata
+    const stripe = getStripe();
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    const metadata = subscription.metadata || {};
+    const selectedCompany = metadata.selectedCompany || 'default';
+
+    // Update last payment info
+    const knowledgebaseRef = db.collection('Users').doc(uid).collection('knowledgebases').doc(selectedCompany);
+    
+    await knowledgebaseRef.update({
+      'subscriptionData.lastPaymentDate': Timestamp.now(),
+      'subscriptionData.lastPaymentAmount': invoice.amount_paid / 100,
+      'subscriptionData.updatedAt': Timestamp.now(),
+    });
+
+    console.log('Invoice payment succeeded:', invoice.id, 'Amount:', invoice.amount_paid / 100);
+  } catch (error: any) {
+    console.error('Error handling invoice payment success:', error);
   }
 }
 

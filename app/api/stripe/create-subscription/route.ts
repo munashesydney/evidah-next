@@ -63,54 +63,138 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Calculate base amount based on plan (needed for discount calculation)
+    // Calculate base amount based on plan
     let baseAmount: number;
+    let discountedAmount: number;
     if (plan === 'evidah_q') {
       baseAmount = billingPeriod === 'yearly' ? 348 : 39;
+      discountedAmount = billingPeriod === 'yearly' ? 208.80 : 23.40; // 40% off
     } else {
       // Individual employees
       baseAmount = billingPeriod === 'yearly' ? 228 : 29;
+      discountedAmount = billingPeriod === 'yearly' ? 136.80 : 17.40; // 40% off
     }
 
-    // Prepare subscription params
-    const subscriptionParams: any = {
-      customer: customerId,
-      items: [{ price: priceId }],
-      metadata: {
-        email,
-        fullName,
-        country: country || '',
-        employeeId: plan === 'evidah_q' ? 'evidah-q' : plan,
-        subscriptionType: `${plan}_bundle`,
-        billingCycle: billingPeriod,
-        selectedCompany: selectedCompany,
-        industry: onboardingData?.industry || '',
-        websiteUrl: onboardingData?.websiteUrl || '',
-      },
-    };
+    // Get free trial price ID ($0 for 3 days)
+    const freeTrialPriceIdKey = `STRIPE_PRICE_FREE_TRIAL_${isProduction() ? 'LIVE' : 'TEST'}`;
+    const freeTrialPriceId = process.env[freeTrialPriceIdKey];
+    
+    if (!freeTrialPriceId) {
+      console.error(`Free trial price ID not found: ${freeTrialPriceIdKey}`);
+      return NextResponse.json(
+        { error: 'Free trial price configuration not found' },
+        { status: 400 }
+      );
+    }
 
-    // Apply coupon if provided
+    // Get trial price ID ($1 for rest of first month)
+    const trialPriceIdKey = `STRIPE_PRICE_TRIAL_MONTHLY_${isProduction() ? 'LIVE' : 'TEST'}`;
+    const trialPriceId = process.env[trialPriceIdKey];
+    
+    if (!trialPriceId) {
+      console.error(`Trial price ID not found: ${trialPriceIdKey}`);
+      return NextResponse.json(
+        { error: 'Trial price configuration not found' },
+        { status: 400 }
+      );
+    }
+
+    // Determine if coupon is valid
+    const hasCoupon = couponCode && couponCode.toUpperCase() === 'EVIDAH40';
     let discountAmount = 0;
-    if (couponCode && couponCode.toUpperCase() === 'EVIDAH40') {
-      try {
-        const promotionCodes = await stripe.promotionCodes.list({
-          code: 'EVIDAH40',
-          active: true,
-          limit: 1,
-        });
+    
+    if (hasCoupon) {
+      discountAmount = Math.round((baseAmount - discountedAmount) * 100) / 100;
+    }
 
-        if (promotionCodes.data.length > 0) {
-          subscriptionParams.discounts = [{ promotion_code: promotionCodes.data[0].id }];
-          // 40% discount calculated from base amount
-          discountAmount = Math.round(baseAmount * 0.4 * 100) / 100;
-        }
-      } catch (error) {
-        console.error('Error validating coupon:', error);
+    // Get discounted price ID if coupon is used
+    let secondPhasePriceId = priceId; // Default to full price
+    if (hasCoupon) {
+      const discountedPriceIdKey = `STRIPE_PRICE_${plan.toUpperCase()}_${billingPeriod.toUpperCase()}_DISCOUNTED_${isProduction() ? 'LIVE' : 'TEST'}`;
+      const discountedPriceId = process.env[discountedPriceIdKey];
+      
+      if (discountedPriceId) {
+        secondPhasePriceId = discountedPriceId;
+      } else {
+        console.warn(`Discounted price ID not found: ${discountedPriceIdKey}, using full price`);
       }
     }
 
-    // Create subscription (this will charge the customer immediately)
-    const subscription = await stripe.subscriptions.create(subscriptionParams);
+    // Metadata for tracking
+    const metadata = {
+      email,
+      fullName,
+      country: country || '',
+      employeeId: plan === 'evidah_q' ? 'evidah-q' : plan,
+      subscriptionType: `${plan}_bundle`,
+      billingCycle: billingPeriod,
+      selectedCompany: selectedCompany,
+      industry: onboardingData?.industry || '',
+      websiteUrl: onboardingData?.websiteUrl || '',
+      couponCode: hasCoupon ? 'EVIDAH40' : '',
+      hasUsedCoupon: hasCoupon ? 'true' : 'false',
+    };
+
+    // Calculate phase end dates (timestamps in seconds)
+    const nowTimestamp = Math.floor(Date.now() / 1000);
+    const threeDaysLater = nowTimestamp + (3 * 24 * 60 * 60); // 3 days free
+    const thirtyDaysLater = nowTimestamp + (30 * 24 * 60 * 60); // End of first month
+    const secondBillingCycleEnd = billingPeriod === 'yearly' 
+      ? thirtyDaysLater + (365 * 24 * 60 * 60) // 1 year after first month
+      : thirtyDaysLater + (30 * 24 * 60 * 60); // 1 month after first month
+
+    // Create subscription schedule with 4 phases
+    const schedule = await stripe.subscriptionSchedules.create(
+      {
+        customer: customerId,
+        start_date: nowTimestamp,
+        end_behavior: 'release',
+        metadata: metadata,
+        phases: [
+          {
+            // Phase 1: 3 days free
+            items: [{ price: freeTrialPriceId }],
+            end_date: threeDaysLater,
+            billing_cycle_anchor: 'phase_start',
+            metadata: {
+              phase: 'free_trial',
+              phaseDescription: '3 days free trial',
+            },
+          },
+          {
+            // Phase 2: $1 for rest of first month (days 4-30)
+            items: [{ price: trialPriceId }],
+            end_date: thirtyDaysLater,
+            billing_cycle_anchor: 'phase_start',
+            metadata: {
+              phase: 'trial',
+              phaseDescription: '$1 for rest of first month',
+            },
+          },
+          {
+            // Phase 3: Discounted (if coupon) or full price for 1 billing cycle
+            items: [{ price: secondPhasePriceId }],
+            end_date: secondBillingCycleEnd,
+            billing_cycle_anchor: 'phase_start',
+            metadata: {
+              phase: hasCoupon ? 'discounted' : 'full',
+              phaseDescription: hasCoupon ? 'Discounted (40% off)' : 'Full price',
+            },
+          },
+          {
+            // Phase 4: Full price forever (no end_date = ongoing)
+            items: [{ price: priceId }],
+            metadata: {
+              phase: 'full',
+              phaseDescription: 'Regular pricing',
+            },
+          },
+        ],
+      } as any
+    );
+
+    // Get the subscription ID from the schedule
+    const subscription = await stripe.subscriptions.retrieve(schedule.subscription as string);
 
     // Get or create user in Firebase
     let userRecord;
@@ -180,9 +264,27 @@ export async function POST(request: NextRequest) {
       await knowledgebaseRef.update(knowledgebaseData);
     }
 
-    // Save subscription data (baseAmount already calculated above)
+    // Calculate phase end dates
+    const now = new Date();
+    const freeTrialEndDate = new Date(now);
+    freeTrialEndDate.setDate(freeTrialEndDate.getDate() + 3); // 3 days
+    
+    const trialEndDate = new Date(now);
+    trialEndDate.setDate(trialEndDate.getDate() + 30); // 30 days
+    
+    const discountEndDate = hasCoupon ? new Date(trialEndDate) : null;
+    if (discountEndDate) {
+      if (billingPeriod === 'yearly') {
+        discountEndDate.setFullYear(discountEndDate.getFullYear() + 1);
+      } else {
+        discountEndDate.setMonth(discountEndDate.getMonth() + 1);
+      }
+    }
+
+    // Save subscription data with phase tracking
     const subscriptionData = {
       subscriptionId: subscription.id,
+      subscriptionScheduleId: schedule.id,
       stripeCustomerId: customerId,
       employeeId: plan === 'evidah_q' ? 'evidah-q' : plan,
       billingCycle: billingPeriod,
@@ -190,8 +292,13 @@ export async function POST(request: NextRequest) {
       status: 'active',
       amount: baseAmount,
       currency: 'usd',
-      couponCode: couponCode || '',
+      couponCode: hasCoupon ? 'EVIDAH40' : '',
+      hasUsedCoupon: hasCoupon,
       discountAmount: discountAmount,
+      currentPhase: 'free_trial',
+      freeTrialEndDate: Timestamp.fromDate(freeTrialEndDate),
+      trialEndDate: Timestamp.fromDate(trialEndDate),
+      discountEndDate: discountEndDate ? Timestamp.fromDate(discountEndDate) : null,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     };

@@ -319,50 +319,52 @@ export default function Onboarding() {
 
       <div className="flex flex-col items-center px-4 py-12">
 
-        {/* Step Progress Indicator */}
-        <div className="w-full max-w-md mb-8">
-          <div className="relative">
-            <div className="absolute left-0 top-1/2 -mt-px w-full h-0.5 bg-gray-200" aria-hidden="true"></div>
-            <ul className="relative flex justify-between w-full">
-              <li>
-                <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold ${
-                  currentStep >= 1 
-                    ? 'bg-violet-500 text-white' 
-                    : 'bg-white text-gray-500 border-2 border-gray-200'
-                }`}>
-                  1
-                </div>
-              </li>
-              <li>
-                <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold ${
-                  currentStep >= 2 
-                    ? 'bg-violet-500 text-white' 
-                    : 'bg-white text-gray-500 border-2 border-gray-200'
-                }`}>
-                  2
-                </div>
-              </li>
-              <li>
-                <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold ${
-                  currentStep >= 3 
-                    ? 'bg-violet-500 text-white' 
-                    : 'bg-white text-gray-500 border-2 border-gray-200'
-                }`}>
-                  3
-                </div>
-              </li>
-              <li>
-                <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold ${
-                  currentStep >= 4 
-                    ? 'bg-violet-500 text-white' 
-                    : 'bg-white text-gray-500 border-2 border-gray-200'
-                }`}>
-                  4
-                </div>
-              </li>
-            </ul>
+        {/* Step Progress Indicator - Hidden on Step 1 */}
+        {currentStep > 1 && (
+          <div className="w-full max-w-md mb-8">
+            <div className="relative">
+              <div className="absolute left-0 top-1/2 -mt-px w-full h-0.5 bg-gray-200" aria-hidden="true"></div>
+              <ul className="relative flex justify-between w-full">
+                <li>
+                  <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold ${
+                    currentStep >= 1 
+                      ? 'bg-violet-500 text-white' 
+                      : 'bg-white text-gray-500 border-2 border-gray-200'
+                  }`}>
+                    1
+                  </div>
+                </li>
+                <li>
+                  <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold ${
+                    currentStep >= 2 
+                      ? 'bg-violet-500 text-white' 
+                      : 'bg-white text-gray-500 border-2 border-gray-200'
+                  }`}>
+                    2
+                  </div>
+                </li>
+                <li>
+                  <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold ${
+                    currentStep >= 3 
+                      ? 'bg-violet-500 text-white' 
+                      : 'bg-white text-gray-500 border-2 border-gray-200'
+                  }`}>
+                    3
+                  </div>
+                </li>
+                <li>
+                  <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold ${
+                    currentStep >= 4 
+                      ? 'bg-violet-500 text-white' 
+                      : 'bg-white text-gray-500 border-2 border-gray-200'
+                  }`}>
+                    4
+                  </div>
+                </li>
+              </ul>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Content Card */}
         <div className="w-full max-w-md">
@@ -371,9 +373,9 @@ export default function Onboarding() {
             {currentStep === 1 && (
               <div>
                 <h1 className="text-2xl text-gray-900 font-bold mb-2">
-                  Let's get you started
+                  Start your free trial
                 </h1>
-                <p className="text-gray-700 leading-relaxed mb-6">Get your AI Employees today.</p>
+                <p className="text-gray-700 leading-relaxed mb-6">Get 3 days free, then $1 for 1 month</p>
 
                 {error && (
                   <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
