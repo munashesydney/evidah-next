@@ -75,6 +75,38 @@ export default function SettingsSidebar() {
           </li>
           <li className="mr-0.5 md:mr-0 md:mb-0.5">
             <Link 
+              href={`/${selectedCompany}/settings/auth`}
+              className={`flex items-center px-2.5 py-2 rounded-lg whitespace-nowrap ${
+                isActive('/settings/auth') 
+                  ? 'bg-linear-to-r from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04]' 
+                  : ''
+              }`}
+            >
+              <svg 
+                className={`shrink-0 fill-current mr-2 ${
+                  isActive('/settings/auth') 
+                    ? 'text-violet-500 dark:text-violet-400' 
+                    : 'text-gray-400 dark:text-gray-500'
+                }`} 
+                width="16" 
+                height="16" 
+                viewBox="0 0 16 16"
+              >
+                <path d="M10.5 7a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM14 9h-1.05a5.5 5.5 0 0 0-4.9 0H7a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1ZM2 6a1 1 0 0 1 1-1h1a1 1 0 1 1 0 2H3a1 1 0 0 1-1-1Zm0 4a1 1 0 0 1 1-1h1a1 1 0 1 1 0 2H3a1 1 0 0 1-1-1Zm1 3a1 1 0 1 0 0 2h1a1 1 0 1 0 0-2H3Z" />
+              </svg>
+              <span 
+                className={`text-sm font-medium ${
+                  isActive('/settings/auth') 
+                    ? 'text-violet-500 dark:text-violet-400' 
+                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200'
+                }`}
+              >
+                Authentication
+              </span>
+            </Link>
+          </li>
+          <li className="mr-0.5 md:mr-0 md:mb-0.5">
+            <Link 
               href={`/${selectedCompany}/settings/agents`}
               className={`flex items-center px-2.5 py-2 rounded-lg whitespace-nowrap ${
                 isActive('/settings/agents') 

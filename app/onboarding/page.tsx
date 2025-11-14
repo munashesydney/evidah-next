@@ -78,7 +78,7 @@ export default function Onboarding() {
       }
       
       try {
-        const userDocRef = doc(db, 'users', currentUser.uid);
+        const userDocRef = doc(db, 'Users', currentUser.uid);
         const userDoc = await getDoc(userDocRef);
         if (userDoc.exists()) {
           // User already completed onboarding, redirect to chat

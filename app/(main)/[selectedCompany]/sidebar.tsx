@@ -522,6 +522,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
             <ul className="mt-3">
               <SidebarLinkGroup open={
                 pathname?.includes('/settings/account') || 
+                pathname?.includes('/settings/auth') || 
                 pathname?.includes('/settings/agents') || 
                 pathname?.includes('/settings/emails') || 
                 pathname?.includes('/settings/knowledge-base') || 
@@ -533,6 +534,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
                 {(handleClick, open) => {
                   const isActive = 
                     pathname?.includes('/settings/account') || 
+                    pathname?.includes('/settings/auth') || 
                     pathname?.includes('/settings/agents') || 
                     pathname?.includes('/settings/emails') || 
                     pathname?.includes('/settings/knowledge-base') || 
@@ -600,6 +602,20 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
                       >
                         <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
                           My Account
+                        </span>
+                      </Link>
+                    </li>
+                    <li className="mb-1 last:mb-0">
+                      <Link
+                        href={`/${selectedCompany}/settings/auth`}
+                        className={`block transition duration-150 truncate ${
+                          pathname === `/${selectedCompany}/settings/auth` || pathname?.includes(`/${selectedCompany}/settings/auth`)
+                            ? 'text-violet-500'
+                            : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                        }`}
+                      >
+                        <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                          Authentication
                         </span>
                       </Link>
                     </li>
