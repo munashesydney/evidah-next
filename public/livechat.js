@@ -22,17 +22,17 @@
    */
 
   // Environment detection
-  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const isFileProtocol = window.location.protocol === 'file:';
+  const isLocalhost = isLocal || isFileProtocol;
+
+  // API endpoints - use app.evidah.com for production
+  const PRODUCTION_BASE = 'https://app.evidah.com';
+  const DEV_BASE = 'http://localhost:3000';
+  const BASE_URL = isLocalhost ? DEV_BASE : PRODUCTION_BASE;
   
-  // For localhost, we need to construct the full URL with the endpoint path
-  // For live environment, the endpoints are already complete URLs
-  const API_BASE = isLocalhost 
-    ? 'http://127.0.0.1:5001/ai-knowledge-desk/us-central1' 
-    : 'https://livechatresponse-h7unmn6umq-uc.a.run.app';
-  
-  const CONFIG_API_BASE = isLocalhost 
-    ? 'http://127.0.0.1:5001/ai-knowledge-desk/us-central1' 
-    : 'https://getlivechatconfig-h7unmn6umq-uc.a.run.app';
+  const API_BASE = BASE_URL + '/api/employee/respond';
+  const CONFIG_API_BASE = BASE_URL + '/api/public/live-chat/config';
 
   // Default configuration
   const defaultConfig = {
@@ -196,9 +196,8 @@
 
       console.log('Loading live chat configuration from cloud:', { uid, selectedCompany, liveChatId });
 
-      const response = await fetch(isLocalhost 
-        ? `${CONFIG_API_BASE}/getLiveChatConfig?uid=${encodeURIComponent(uid)}&selectedCompany=${encodeURIComponent(selectedCompany)}&liveChatId=${encodeURIComponent(liveChatId)}`
-        : `${CONFIG_API_BASE}?uid=${encodeURIComponent(uid)}&selectedCompany=${encodeURIComponent(selectedCompany)}&liveChatId=${encodeURIComponent(liveChatId)}`
+      const response = await fetch(
+        `${CONFIG_API_BASE}?uid=${encodeURIComponent(uid)}&selectedCompany=${encodeURIComponent(selectedCompany)}&liveChatId=${encodeURIComponent(liveChatId)}`
       );
       
       if (!response.ok) {
@@ -873,9 +872,8 @@
     messagesContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #6b7280;">Loading chat history...</div>';
     
     try {
-      const response = await fetch(isLocalhost 
-        ? `${CONFIG_API_BASE}/getChatHistory?uid=${encodeURIComponent(config.uid)}&selectedCompany=${encodeURIComponent(config.selectedCompany)}&chatId=${encodeURIComponent(chatId)}`
-        : `${CONFIG_API_BASE.replace('getlivechatconfig', 'getchathistory')}?uid=${encodeURIComponent(config.uid)}&selectedCompany=${encodeURIComponent(config.selectedCompany)}&chatId=${encodeURIComponent(chatId)}`
+      const response = await fetch(
+        `${BASE_URL}/api/public/live-chat/history?uid=${encodeURIComponent(config.uid)}&selectedCompany=${encodeURIComponent(config.selectedCompany)}&chatId=${encodeURIComponent(chatId)}`
       );
       
       if (response.ok) {
@@ -942,9 +940,8 @@
     if (!chatsListContainer) return;
     
     try {
-      const response = await fetch(isLocalhost 
-        ? `${CONFIG_API_BASE}/getAllChats?uid=${encodeURIComponent(config.uid)}&selectedCompany=${encodeURIComponent(config.selectedCompany)}&userEmail=${encodeURIComponent(userInfo.email)}`
-        : `${CONFIG_API_BASE.replace('getlivechatconfig', 'getallchats')}?uid=${encodeURIComponent(config.uid)}&selectedCompany=${encodeURIComponent(config.selectedCompany)}&userEmail=${encodeURIComponent(userInfo.email)}`
+      const response = await fetch(
+        `${BASE_URL}/api/public/live-chat/all-chats?uid=${encodeURIComponent(config.uid)}&selectedCompany=${encodeURIComponent(config.selectedCompany)}&userEmail=${encodeURIComponent(userInfo.email)}`
       );
       
       if (response.ok) {
@@ -1352,9 +1349,7 @@
 
   async function saveChatMessage(message) {
     try {
-      await fetch(isLocalhost 
-        ? `${CONFIG_API_BASE}/saveChatMessage`
-        : `${CONFIG_API_BASE.replace('getlivechatconfig', 'savechatmessage')}`, {
+      await fetch(`${BASE_URL}/api/public/live-chat/save-message`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1443,25 +1438,42 @@
     showTypingIndicator();
 
     try {
-      const response = await fetch(isLocalhost 
-        ? `${API_BASE}/liveChatResponse`
-        : `${API_BASE}`, {
+      // Build conversation history in the format expected by the API
+      const conversationMessages = messages.slice(-10).map(msg => ({
+        role: msg.type === 'user' ? 'user' : 'assistant',
+        content: msg.content
+      }));
+
+      // Add current message
+      conversationMessages.push({
+        role: 'user',
+        content: message
+      });
+
+      const response = await fetch(API_BASE, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message,
-          sessionId,
           uid: config.uid,
-          selectedCompany: config.selectedCompany,
-          chatId: chatId,
-          userInfo: userInfo,
-          chatHistory: messages.slice(-10) // Send last 10 messages for context
+          companyId: config.selectedCompany,
+          employee: 'marquavious', // Live chat uses Marquavious
+          messages: conversationMessages,
+          context: {
+            customerName: userInfo.name,
+            customerEmail: userInfo.email,
+            sessionId: sessionId,
+          },
+          maxSearchIterations: 5,
+          temperature: 0.7,
+          includeMetadata: false
         })
       });
 
       if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('API error:', errorData);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
@@ -1469,11 +1481,12 @@
       
       hideTypingIndicator();
       
-      if (data.success && data.response) {
-        // Add the AI response to the UI immediately
+      if (data.success && data.data && data.data.response) {
+        // Add the AI response to the UI
         // addMessage will handle saving to Firebase
-        addMessage('bot', data.response);
+        addMessage('bot', data.data.response);
       } else {
+        console.error('Unexpected response format:', data);
         addMessage('bot', "Sorry, I couldn't process your message right now. Please try again.");
       }
     } catch (error) {
