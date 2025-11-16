@@ -309,7 +309,7 @@ export const processMessages = async (uid?: string, selectedCompany?: string, em
 
             // Record tool output
             toolCallMessage.output = JSON.stringify(toolResult);
-            console.log('💾 Saved tool output to message');
+            console.log('� Sxaved tool output to message');
             setChatMessages([...chatMessages]);
             conversationItems.push({
               type: "function_call_output",
@@ -320,7 +320,7 @@ export const processMessages = async (uid?: string, selectedCompany?: string, em
             setConversationItems([...conversationItems]);
 
             // Create another turn after tool output has been added
-            console.log('🔄 Starting recursive turn for assistant response...');
+            console.log('� Satarting recursive turn for assistant response...');
             await processMessages(uid, selectedCompany, employeeId, personalityLevel);
             console.log('✅ Recursive turn completed');
           }

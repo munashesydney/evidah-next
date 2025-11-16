@@ -259,7 +259,18 @@ export default function InboxPage() {
   const selectedCompany = params.selectedCompany as string
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
+  // Check if we have cached data to avoid initial loading state
+  const hasCachedData = typeof window !== 'undefined' && selectedCompany && (() => {
+    try {
+      const cached = sessionStorage.getItem(`inbox-cache-${selectedCompany}`)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        return parsed.timestamp && Date.now() - parsed.timestamp < 5 * 60 * 1000 && parsed.data && Object.keys(parsed.data).length > 0
+      }
+    } catch (e) {}
+    return false
+  })()
+  const [isLoading, setIsLoading] = useState(!hasCachedData)
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [filteredTickets, setFilteredTickets] = useState<Ticket[]>([])
   const [activeTicket, setActiveTicket] = useState<string>('')
@@ -272,8 +283,52 @@ export default function InboxPage() {
   const [ticketData, setTicketData] = useState<TicketData | null>(null)
   const [subdomain, setSubdomain] = useState<string>('')
   const [messagesLoading, setMessagesLoading] = useState(false)
+  // Initialize cache from sessionStorage if available
+  const getInitialCache = (company: string): Record<string, { messages: Message[]; ticketData: TicketData; subdomain: string }> => {
+    if (typeof window === 'undefined' || !company) return {}
+    try {
+      const cached = sessionStorage.getItem(`inbox-cache-${company}`)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        // Only use cache if it's less than 5 minutes old
+        if (parsed.timestamp && Date.now() - parsed.timestamp < 5 * 60 * 1000) {
+          return parsed.data || {}
+        }
+      }
+    } catch (e) {
+      console.error('Error loading cache from sessionStorage:', e)
+    }
+    return {}
+  }
+
+  const [messagesCache, setMessagesCache] = useState<Record<string, { messages: Message[]; ticketData: TicketData; subdomain: string }>>(() => getInitialCache(selectedCompany))
+  const messagesCacheRef = useRef<Record<string, { messages: Message[]; ticketData: TicketData; subdomain: string }>>(getInitialCache(selectedCompany))
+  
+  // Reload cache when selectedCompany changes
+  useEffect(() => {
+    const cached = getInitialCache(selectedCompany)
+    setMessagesCache(cached)
+    messagesCacheRef.current = cached
+  }, [selectedCompany])
 
   const sidebarScrollRef = useRef<HTMLDivElement>(null)
+  
+  // Keep ref in sync with state and persist to sessionStorage
+  useEffect(() => {
+    messagesCacheRef.current = messagesCache
+    
+    // Persist to sessionStorage
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(`inbox-cache-${selectedCompany}`, JSON.stringify({
+          data: messagesCache,
+          timestamp: Date.now(),
+        }))
+      } catch (e) {
+        console.error('Error saving cache to sessionStorage:', e)
+      }
+    }
+  }, [messagesCache, selectedCompany])
 
   // Authentication check
   useEffect(() => {
@@ -320,14 +375,35 @@ export default function InboxPage() {
       if (data.status === 1) {
         if (startAfter) {
           // Append to existing tickets for "load more"
-          setTickets((prev) => [...prev, ...data.tickets])
+          const newTickets = data.tickets
+          setTickets((prev) => [...prev, ...newTickets])
+          
+          // Prefetch messages for newly loaded tickets in background
+          prefetchMessagesForTickets(newTickets, userId)
         } else {
           // Initial load
           setTickets(data.tickets)
           if (data.tickets.length > 0) {
-            setActiveTicket(data.tickets[0].id)
-            // Automatically fetch messages for first ticket
-            fetchMessagesForTicket(data.tickets[0].id, userId)
+            const firstTicketId = data.tickets[0].id
+            
+            // Check cache first for instant display (use ref to get latest cache)
+            const cached = messagesCacheRef.current[firstTicketId]
+            if (cached) {
+              setActiveTicket(firstTicketId)
+              setMessages(cached.messages)
+              setTicketData(cached.ticketData)
+              setSubdomain(cached.subdomain)
+              setMessagesLoading(false)
+            } else {
+              setActiveTicket(firstTicketId)
+              // Fetch messages for first ticket
+              fetchMessagesForTicket(firstTicketId, userId)
+            }
+            
+            // Prefetch messages for remaining tickets in background
+            if (data.tickets.length > 1) {
+              prefetchMessagesForTickets(data.tickets.slice(1), userId)
+            }
           }
         }
         setHasMore(data.hasMore)
@@ -342,8 +418,47 @@ export default function InboxPage() {
     }
   }
 
-  const fetchMessagesForTicket = async (ticketId: string, userId: string) => {
-    setMessagesLoading(true)
+  // Prefetch messages for tickets in background to warm up cache
+  const prefetchMessagesForTickets = async (ticketsToPrefetch: Ticket[], userId: string) => {
+    // Prefetch in parallel but don't block UI
+    ticketsToPrefetch.forEach(async (ticket) => {
+      try {
+        // Skip if already cached (use ref to avoid stale closure)
+        if (messagesCacheRef.current[ticket.id]) return
+
+        const url = new URL('/api/inbox/messages', window.location.origin)
+        url.searchParams.append('uid', userId)
+        url.searchParams.append('selectedCompany', selectedCompany)
+        url.searchParams.append('ticketId', ticket.id)
+
+        const response = await fetch(url.toString())
+        const data = await response.json()
+
+        if (data.status === 1) {
+          // Store in cache for instant retrieval
+          setMessagesCache((prev) => {
+            // Double-check cache wasn't populated while fetching
+            if (prev[ticket.id]) return prev
+            return {
+              ...prev,
+              [ticket.id]: {
+                messages: data.messages,
+                ticketData: data.ticketData,
+                subdomain: data.subdomain || '',
+              },
+            }
+          })
+        }
+      } catch (error) {
+        console.error(`Error prefetching messages for ticket ${ticket.id}:`, error)
+      }
+    })
+  }
+
+  const fetchMessagesForTicket = async (ticketId: string, userId: string, showLoading: boolean = true) => {
+    if (showLoading) {
+      setMessagesLoading(true)
+    }
     try {
       const url = new URL('/api/inbox/messages', window.location.origin)
       url.searchParams.append('uid', userId)
@@ -357,13 +472,25 @@ export default function InboxPage() {
         setMessages(data.messages)
         setTicketData(data.ticketData)
         setSubdomain(data.subdomain || '')
+        
+        // Cache the messages for instant retrieval next time
+        setMessagesCache((prev) => ({
+          ...prev,
+          [ticketId]: {
+            messages: data.messages,
+            ticketData: data.ticketData,
+            subdomain: data.subdomain || '',
+          },
+        }))
       } else {
         console.error('Error fetching messages:', data.message)
       }
     } catch (error) {
       console.error('Error fetching messages:', error)
     } finally {
-      setMessagesLoading(false)
+      if (showLoading) {
+        setMessagesLoading(false)
+      }
     }
   }
 
@@ -405,11 +532,26 @@ export default function InboxPage() {
 
       if (result.status === 1) {
         // Update local state
-        setTicketData((prev) => ({
-          ...prev!,
-          status: newStatus,
-          closed: !isCurrentlyOpen,
-        }))
+        setTicketData((prev) => {
+          const updated = {
+            ...prev!,
+            status: newStatus,
+            closed: !isCurrentlyOpen,
+          }
+          
+          // Update cache with new ticket data
+          if (messagesCache[activeTicket]) {
+            setMessagesCache((prevCache) => ({
+              ...prevCache,
+              [activeTicket]: {
+                ...prevCache[activeTicket],
+                ticketData: updated,
+              },
+            }))
+          }
+          
+          return updated
+        })
 
         // Update ticket in sidebar
         setTickets((prevTickets) =>
@@ -457,10 +599,25 @@ export default function InboxPage() {
 
       if (result.status === 1) {
         // Update local state
-        setTicketData((prev) => ({
-          ...prev!,
-          aiOn: newAIStatus,
-        }))
+        setTicketData((prev) => {
+          const updated = {
+            ...prev!,
+            aiOn: newAIStatus,
+          }
+          
+          // Update cache with new ticket data
+          if (messagesCache[activeTicket]) {
+            setMessagesCache((prevCache) => ({
+              ...prevCache,
+              [activeTicket]: {
+                ...prevCache[activeTicket],
+                ticketData: updated,
+              },
+            }))
+          }
+          
+          return updated
+        })
 
         // Update ticket in sidebar
         setTickets((prevTickets) =>
@@ -482,41 +639,54 @@ export default function InboxPage() {
   }
 
   const handleTicketSelect = async (ticketId: string) => {
-    setActiveTicket(ticketId)
     setSidebarOpen(false)
+    
     // Update ticket as read locally
     setTickets((prevTickets) =>
       prevTickets.map((t) => (t.id === ticketId ? { ...t, read: true } : t))
     )
     
-    // Fetch messages for this ticket
-    await fetchMessages(ticketId)
-  }
-
-  const fetchMessages = async (ticketId: string) => {
-    if (!uid) return
-
-    setMessagesLoading(true)
-    try {
-      const url = new URL('/api/inbox/messages', window.location.origin)
-      url.searchParams.append('uid', uid)
-      url.searchParams.append('selectedCompany', selectedCompany)
-      url.searchParams.append('ticketId', ticketId)
-
-      const response = await fetch(url.toString())
-      const data = await response.json()
-
-      if (data.status === 1) {
-        setMessages(data.messages)
-        setTicketData(data.ticketData)
-        setSubdomain(data.subdomain || '')
-      } else {
-        console.error('Error fetching messages:', data.message)
-      }
-    } catch (error) {
-      console.error('Error fetching messages:', error)
-    } finally {
+    // Check cache first for instant display - set data BEFORE setting activeTicket
+    // Use ref to get latest cache value
+    const cached = messagesCacheRef.current[ticketId]
+    if (cached) {
+      // Set all data first, then set activeTicket to avoid showing loading state
+      setMessages(cached.messages)
+      setTicketData(cached.ticketData)
+      setSubdomain(cached.subdomain)
       setMessagesLoading(false)
+      setActiveTicket(ticketId)
+      
+      // Fetch fresh messages in background to update cache (silent refresh, no loading state)
+      if (uid) {
+        fetchMessagesForTicket(ticketId, uid, false).catch((error) => {
+          console.error('Error refreshing messages:', error)
+        })
+      }
+    } else {
+      // No cache - show loading state and fetch
+      setMessagesLoading(true)
+      
+      // Optimistically set ticket data from tickets list for instant header update
+      const clickedTicket = tickets.find((t) => t.id === ticketId)
+      if (clickedTicket) {
+        setTicketData({
+          id: clickedTicket.id,
+          subject: clickedTicket.subject,
+          from: clickedTicket.from,
+          status: clickedTicket.status,
+          closed: clickedTicket.closed,
+          aiOn: clickedTicket.aiOn,
+        } as TicketData)
+      }
+      
+      // Set activeTicket after setting loading state
+      setActiveTicket(ticketId)
+      
+      // Fetch messages
+      if (uid) {
+        await fetchMessagesForTicket(ticketId, uid)
+      }
     }
   }
 
@@ -753,7 +923,7 @@ export default function InboxPage() {
 
       {/* Inbox Body */}
       <div className="grow flex flex-col md:translate-x-0 transition-transform duration-300 ease-in-out overflow-hidden bg-white dark:bg-[#151D2C]">
-        {!activeTicket || messages.length === 0 ? (
+        {!activeTicket || (messages.length === 0 && messagesLoading) ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6">
             {messagesLoading ? (
               <LoadingState />
@@ -917,7 +1087,20 @@ export default function InboxPage() {
                 messages={messages}
                 onMessageSent={(newMessage) => {
                   // Append new message to the top of the list instead of reloading
-                  setMessages((prevMessages) => [newMessage, ...prevMessages])
+                  const updatedMessages = [newMessage, ...messages]
+                  setMessages(updatedMessages)
+                  
+                  // Update cache with new message
+                  if (ticketData) {
+                    setMessagesCache((prev) => ({
+                      ...prev,
+                      [activeTicket]: {
+                        messages: updatedMessages,
+                        ticketData: ticketData,
+                        subdomain: subdomain,
+                      },
+                    }))
+                  }
                   
                   // Update the ticket in the sidebar with last message
                   setTickets((prevTickets) =>

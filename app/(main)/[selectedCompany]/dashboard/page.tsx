@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -74,14 +74,6 @@ export default function DashboardPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string>('');
   
-  // Individual loading states for progressive rendering
-  const [isLoadingOverview, setIsLoadingOverview] = useState(true);
-  const [isLoadingChart, setIsLoadingChart] = useState(true);
-  const [isLoadingPages, setIsLoadingPages] = useState(true);
-  const [isLoadingReferrers, setIsLoadingReferrers] = useState(true);
-  const [isLoadingCountries, setIsLoadingCountries] = useState(true);
-  const [isLoadingLive, setIsLoadingLive] = useState(true);
-  
   // Date range state (default: yesterday to today)
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 1), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -93,6 +85,53 @@ export default function DashboardPage() {
   const [topReferrers, setTopReferrers] = useState<ReferrerData[]>([]);
   const [topCountries, setTopCountries] = useState<CountryData[]>([]);
   const [liveVisitors, setLiveVisitors] = useState<LiveVisitorsData>({ count: 0, visitors: [] });
+  
+  // Helper function to get cache key
+  const getCacheKey = (type: string, company: string, uid: string | null, start: string, end: string) => {
+    if (!uid) return null
+    return `dashboard-cache-${company}-${uid}-${type}-${start}-${end}`
+  }
+  
+  // Helper function to load from sessionStorage cache
+  const loadFromCache = (type: string, company: string, uid: string | null, start: string, end: string) => {
+    if (typeof window === 'undefined' || !uid) return null
+    try {
+      const key = getCacheKey(type, company, uid, start, end)
+      if (!key) return null
+      const cached = sessionStorage.getItem(key)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        // Cache valid for 5 minutes
+        if (parsed.timestamp && Date.now() - parsed.timestamp < 5 * 60 * 1000) {
+          return parsed.data
+        }
+      }
+    } catch (error) {
+      console.error('Error loading from cache:', error)
+    }
+    return null
+  }
+  
+  // Helper function to save to sessionStorage cache
+  const saveToCache = (type: string, company: string, uid: string | null, start: string, end: string, data: any) => {
+    if (typeof window === 'undefined' || !uid) return
+    try {
+      const key = getCacheKey(type, company, uid, start, end)
+      if (!key) return
+      sessionStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }))
+    } catch (error) {
+      console.error('Error saving to cache:', error)
+    }
+  }
+  
+  // Individual loading states - will be set based on cache availability in useEffect
+  const [isLoadingOverview, setIsLoadingOverview] = useState(true)
+  const [isLoadingChart, setIsLoadingChart] = useState(true)
+  const [isLoadingPages, setIsLoadingPages] = useState(true)
+  const [isLoadingReferrers, setIsLoadingReferrers] = useState(true)
+  const [isLoadingCountries, setIsLoadingCountries] = useState(true)
+  const [isLoadingLive, setIsLoadingLive] = useState(true)
+  const [isSearching, setIsSearching] = useState(false)
 
   // Authentication
   useEffect(() => {
@@ -111,193 +150,128 @@ export default function DashboardPage() {
     return () => unsubscribe();
   }, []);
 
-  // Helper function to get cache key
-  const getCacheKey = (type: string) => {
-    return `dashboard_${selectedCompany}_${userId}_${type}_${startDate}_${endDate}`;
-  };
-
-  // Helper function to load from cache
-  const loadFromCache = (type: string) => {
-    try {
-      const cached = localStorage.getItem(getCacheKey(type));
-      if (cached) {
-        const { data, timestamp } = JSON.parse(cached);
-        // Cache valid for 5 minutes (same as React app)
-        if (Date.now() - timestamp < 5 * 60 * 1000) {
-          return data;
-        }
-      }
-    } catch (error) {
-      console.error('Error loading from cache:', error);
+  // Define fetch functions first (before useEffects that use them)
+  const fetchOverview = useCallback(async (silent = false) => {
+    if (!userId) return
+    if (!silent) {
+      setIsLoadingOverview(true)
     }
-    return null;
-  };
-
-  // Helper function to save to cache
-  const saveToCache = (type: string, data: any) => {
-    try {
-      localStorage.setItem(
-        getCacheKey(type),
-        JSON.stringify({ data, timestamp: Date.now() })
-      );
-    } catch (error) {
-      console.error('Error saving to cache:', error);
-    }
-  };
-
-  // Fetch all metrics on initial load only (when userId changes)
-  useEffect(() => {
-    if (userId) {
-      // Load cached data first for instant display
-      const cachedOverview = loadFromCache('overview');
-      if (cachedOverview) {
-        setOverview(cachedOverview);
-        setIsLoadingOverview(false);
-      }
-      
-      const cachedChart = loadFromCache('chart');
-      if (cachedChart) {
-        setChartData(cachedChart);
-        setIsLoadingChart(false);
-      }
-      
-      const cachedPages = loadFromCache('pages');
-      if (cachedPages) {
-        setTopPages(cachedPages);
-        setIsLoadingPages(false);
-      }
-      
-      const cachedReferrers = loadFromCache('referrers');
-      if (cachedReferrers) {
-        setTopReferrers(cachedReferrers);
-        setIsLoadingReferrers(false);
-      }
-      
-      const cachedCountries = loadFromCache('countries');
-      if (cachedCountries) {
-        setTopCountries(cachedCountries);
-        setIsLoadingCountries(false);
-      }
-
-      // Then fetch fresh data independently
-      fetchOverview();
-      fetchChartData();
-      fetchTopPages();
-      fetchTopReferrers();
-      fetchTopCountries();
-    }
-  }, [userId, selectedCompany]);
-
-  // Poll live visitors every 10 seconds
-  useEffect(() => {
-    if (userId) {
-      fetchLiveVisitors(true); // Initial load with loading state
-      const interval = setInterval(() => fetchLiveVisitors(false), 10000); // Updates without loading state
-      return () => clearInterval(interval);
-    }
-  }, [userId, selectedCompany]);
-
-  const fetchOverview = async () => {
-    if (!userId) return;
-    setIsLoadingOverview(true);
     
     try {
       const response = await fetch(
         `/api/metrics/overview?uid=${userId}&selectedCompany=${selectedCompany}&startDate=${startDate}&endDate=${endDate}`
-      );
-      const data = await response.json();
+      )
+      const data = await response.json()
       if (data.success) {
-        setOverview(data.data);
-        saveToCache('overview', data.data);
+        setOverview(data.data)
+        saveToCache('overview', selectedCompany, userId, startDate, endDate, data.data)
       }
     } catch (error) {
-      console.error('Error fetching overview:', error);
+      console.error('Error fetching overview:', error)
     } finally {
-      setIsLoadingOverview(false);
+      if (!silent) {
+        setIsLoadingOverview(false)
+      }
     }
-  };
+  }, [userId, selectedCompany, startDate, endDate])
 
-  const fetchChartData = async () => {
-    if (!userId) return;
-    setIsLoadingChart(true);
+  const fetchChartData = useCallback(async (silent = false) => {
+    if (!userId) return
+    if (!silent) {
+      setIsLoadingChart(true)
+    }
     
     try {
       const response = await fetch(
         `/api/metrics/chart?uid=${userId}&selectedCompany=${selectedCompany}&startDate=${startDate}&endDate=${endDate}&includePrevious=false`
-      );
-      const data = await response.json();
+      )
+      const data = await response.json()
       if (data.success) {
-        setChartData(data.data);
-        saveToCache('chart', data.data);
+        setChartData(data.data)
+        saveToCache('chart', selectedCompany, userId, startDate, endDate, data.data)
       }
     } catch (error) {
-      console.error('Error fetching chart data:', error);
+      console.error('Error fetching chart data:', error)
     } finally {
-      setIsLoadingChart(false);
+      if (!silent) {
+        setIsLoadingChart(false)
+      }
     }
-  };
+  }, [userId, selectedCompany, startDate, endDate])
 
-  const fetchTopPages = async () => {
-    if (!userId) return;
-    setIsLoadingPages(true);
+  const fetchTopPages = useCallback(async (silent = false) => {
+    if (!userId) return
+    if (!silent) {
+      setIsLoadingPages(true)
+    }
     
     try {
       const response = await fetch(
         `/api/metrics/top-pages?uid=${userId}&selectedCompany=${selectedCompany}&startDate=${startDate}&endDate=${endDate}&limit=5`
-      );
-      const data = await response.json();
+      )
+      const data = await response.json()
       if (data.success) {
-        setTopPages(data.data);
-        saveToCache('pages', data.data);
+        setTopPages(data.data)
+        saveToCache('pages', selectedCompany, userId, startDate, endDate, data.data)
       }
     } catch (error) {
-      console.error('Error fetching top pages:', error);
+      console.error('Error fetching top pages:', error)
     } finally {
-      setIsLoadingPages(false);
+      if (!silent) {
+        setIsLoadingPages(false)
+      }
     }
-  };
+  }, [userId, selectedCompany, startDate, endDate])
 
-  const fetchTopReferrers = async () => {
-    if (!userId) return;
-    setIsLoadingReferrers(true);
+  const fetchTopReferrers = useCallback(async (silent = false) => {
+    if (!userId) return
+    if (!silent) {
+      setIsLoadingReferrers(true)
+    }
     
     try {
       const response = await fetch(
         `/api/metrics/top-referrers?uid=${userId}&selectedCompany=${selectedCompany}&limit=5`
-      );
-      const data = await response.json();
+      )
+      const data = await response.json()
       if (data.success) {
-        setTopReferrers(data.data);
-        saveToCache('referrers', data.data);
+        setTopReferrers(data.data)
+        saveToCache('referrers', selectedCompany, userId, startDate, endDate, data.data)
       }
     } catch (error) {
-      console.error('Error fetching top referrers:', error);
+      console.error('Error fetching top referrers:', error)
     } finally {
-      setIsLoadingReferrers(false);
+      if (!silent) {
+        setIsLoadingReferrers(false)
+      }
     }
-  };
+  }, [userId, selectedCompany, startDate, endDate])
 
-  const fetchTopCountries = async () => {
-    if (!userId) return;
-    setIsLoadingCountries(true);
+  const fetchTopCountries = useCallback(async (silent = false) => {
+    if (!userId) return
+    if (!silent) {
+      setIsLoadingCountries(true)
+    }
     
     try {
       const response = await fetch(
         `/api/metrics/top-countries?uid=${userId}&selectedCompany=${selectedCompany}&limit=5`
-      );
-      const data = await response.json();
+      )
+      const data = await response.json()
       if (data.success) {
-        setTopCountries(data.data);
-        saveToCache('countries', data.data);
+        setTopCountries(data.data)
+        saveToCache('countries', selectedCompany, userId, startDate, endDate, data.data)
       }
     } catch (error) {
-      console.error('Error fetching top countries:', error);
+      console.error('Error fetching top countries:', error)
     } finally {
-      setIsLoadingCountries(false);
+      if (!silent) {
+        setIsLoadingCountries(false)
+      }
     }
-  };
+  }, [userId, selectedCompany, startDate, endDate])
 
-  const fetchLiveVisitors = async (isInitialLoad = false) => {
+  const fetchLiveVisitors = useCallback(async (isInitialLoad = false) => {
     if (!userId) return;
     
     // Only show loading skeleton on initial load, not on polling updates
@@ -311,10 +285,13 @@ export default function DashboardPage() {
       );
       const data = await response.json();
       if (data.success) {
-        // Only update state if the value actually changed
-        if (data.data.count !== liveVisitors.count || data.data.visitors.length !== liveVisitors.visitors.length) {
-          setLiveVisitors(data.data);
-        }
+        setLiveVisitors((prev) => {
+          // Only update state if the value actually changed
+          if (data.data.count !== prev.count || data.data.visitors.length !== prev.visitors.length) {
+            return data.data;
+          }
+          return prev;
+        });
       }
     } catch (error) {
       console.error('Error fetching live visitors:', error);
@@ -323,18 +300,136 @@ export default function DashboardPage() {
         setIsLoadingLive(false);
       }
     }
-  };
+  }, [userId, selectedCompany]);
 
-  const handleDateRangeChange = () => {
-    // Trigger refetch with new dates - each fetches independently
+  // Fetch all metrics on initial load only (when userId changes)
+  useEffect(() => {
     if (userId) {
-      fetchOverview();
-      fetchChartData();
-      fetchTopPages();
-      fetchTopReferrers();
-      fetchTopCountries();
+      // Load cached data first for instant display
+      const cachedOverview = loadFromCache('overview', selectedCompany, userId, startDate, endDate)
+      if (cachedOverview) {
+        setOverview(cachedOverview)
+        setIsLoadingOverview(false)
+      }
+      
+      const cachedChart = loadFromCache('chart', selectedCompany, userId, startDate, endDate)
+      if (cachedChart) {
+        setChartData(cachedChart)
+        setIsLoadingChart(false)
+      }
+      
+      const cachedPages = loadFromCache('pages', selectedCompany, userId, startDate, endDate)
+      if (cachedPages) {
+        setTopPages(cachedPages)
+        setIsLoadingPages(false)
+      }
+      
+      const cachedReferrers = loadFromCache('referrers', selectedCompany, userId, startDate, endDate)
+      if (cachedReferrers) {
+        setTopReferrers(cachedReferrers)
+        setIsLoadingReferrers(false)
+      }
+      
+      const cachedCountries = loadFromCache('countries', selectedCompany, userId, startDate, endDate)
+      if (cachedCountries) {
+        setTopCountries(cachedCountries)
+        setIsLoadingCountries(false)
+      }
+
+      // Then fetch fresh data independently (silent refresh if cached)
+      fetchOverview(!!cachedOverview)
+      fetchChartData(!!cachedChart)
+      fetchTopPages(!!cachedPages)
+      fetchTopReferrers(!!cachedReferrers)
+      fetchTopCountries(!!cachedCountries)
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, selectedCompany, fetchOverview, fetchChartData, fetchTopPages, fetchTopReferrers, fetchTopCountries])
+
+  // Poll live visitors every 10 seconds
+  useEffect(() => {
+    if (userId) {
+      fetchLiveVisitors(true); // Initial load with loading state
+      const interval = setInterval(() => fetchLiveVisitors(false), 10000); // Updates without loading state
+      return () => clearInterval(interval);
+    }
+  }, [userId, selectedCompany, fetchLiveVisitors]);
+
+  // Reload cache when date range changes
+  useEffect(() => {
+    if (userId) {
+      // Load cached data for new date range
+      const cachedOverview = loadFromCache('overview', selectedCompany, userId, startDate, endDate)
+      if (cachedOverview) {
+        setOverview(cachedOverview)
+        setIsLoadingOverview(false)
+      } else {
+        setIsLoadingOverview(true)
+      }
+      
+      const cachedChart = loadFromCache('chart', selectedCompany, userId, startDate, endDate)
+      if (cachedChart) {
+        setChartData(cachedChart)
+        setIsLoadingChart(false)
+      } else {
+        setIsLoadingChart(true)
+      }
+      
+      const cachedPages = loadFromCache('pages', selectedCompany, userId, startDate, endDate)
+      if (cachedPages) {
+        setTopPages(cachedPages)
+        setIsLoadingPages(false)
+      } else {
+        setIsLoadingPages(true)
+      }
+      
+      const cachedReferrers = loadFromCache('referrers', selectedCompany, userId, startDate, endDate)
+      if (cachedReferrers) {
+        setTopReferrers(cachedReferrers)
+        setIsLoadingReferrers(false)
+      } else {
+        setIsLoadingReferrers(true)
+      }
+      
+      const cachedCountries = loadFromCache('countries', selectedCompany, userId, startDate, endDate)
+      if (cachedCountries) {
+        setTopCountries(cachedCountries)
+        setIsLoadingCountries(false)
+      } else {
+        setIsLoadingCountries(true)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate])
+
+  const handleDateRangeChange = useCallback(async () => {
+    // Always reload all data when search is clicked (ignore cache)
+    if (userId && !isSearching) {
+      setIsSearching(true)
+      
+      // Set all loading states to true
+      setIsLoadingOverview(true)
+      setIsLoadingChart(true)
+      setIsLoadingPages(true)
+      setIsLoadingReferrers(true)
+      setIsLoadingCountries(true)
+      
+      try {
+        // Fetch all data fresh (not using cache)
+        await Promise.all([
+          fetchOverview(false),
+          fetchChartData(false),
+          fetchTopPages(false),
+          fetchTopReferrers(false),
+          fetchTopCountries(false)
+        ])
+      } catch (error) {
+        console.error('Error fetching data:', error)
+      } finally {
+        setIsSearching(false)
+      }
+    }
+  }, [userId, selectedCompany, startDate, endDate, isSearching, fetchOverview, fetchChartData, fetchTopPages, fetchTopReferrers, fetchTopCountries]);
 
   // Prepare chart configuration for Recharts
   const getChartConfig = () => {
@@ -380,9 +475,20 @@ export default function DashboardPage() {
             />
             <button
               onClick={handleDateRangeChange}
-              className="btn bg-violet-500 hover:bg-violet-600 text-white"
+              disabled={isSearching}
+              className="btn bg-violet-500 hover:bg-violet-600 text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              Search
+              {isSearching ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Searching...
+                </>
+              ) : (
+                'Search'
+              )}
             </button>
           </div>
         </div>
@@ -400,7 +506,7 @@ export default function DashboardPage() {
               {/* Unique Visitors */}
               <div className="flex items-center py-2 pr-5">
                 <div className="mr-5">
-                  {isLoadingOverview ? (
+                  {isLoadingOverview && !overview ? (
                     <div className="h-8 w-20 bg-gray-200 dark:bg-gray-700 animate-pulse rounded"></div>
                   ) : (
                     <div className="flex items-center">
@@ -426,7 +532,7 @@ export default function DashboardPage() {
               {/* Total Pageviews */}
               <div className="flex items-center py-2 pr-5">
                 <div className="mr-5">
-                  {isLoadingOverview ? (
+                  {isLoadingOverview && !overview ? (
                     <div className="h-8 w-20 bg-gray-200 dark:bg-gray-700 animate-pulse rounded"></div>
                   ) : (
                     <div className="flex items-center">
@@ -452,7 +558,7 @@ export default function DashboardPage() {
               {/* Total Sessions */}
               <div className="flex items-center py-2 pr-5">
                 <div className="mr-5">
-                  {isLoadingOverview ? (
+                  {isLoadingOverview && !overview ? (
                     <div className="h-8 w-20 bg-gray-200 dark:bg-gray-700 animate-pulse rounded"></div>
                   ) : (
                     <div className="flex items-center">
@@ -478,7 +584,7 @@ export default function DashboardPage() {
               {/* Visit Duration */}
               <div className="flex items-center py-2">
                 <div>
-                  {isLoadingOverview ? (
+                  {isLoadingOverview && !overview ? (
                     <div className="h-8 w-20 bg-gray-200 dark:bg-gray-700 animate-pulse rounded"></div>
                   ) : (
                     <div className="flex items-center">
@@ -509,7 +615,7 @@ export default function DashboardPage() {
                 <SimpleLineChart data={getChartConfig()!} />
               </div>
             ) : (
-              isLoadingChart && (
+              isLoadingChart && !chartData && (
                 <div className="h-80 min-h-[320px] bg-gray-200 dark:bg-gray-700 rounded animate-pulse flex items-center justify-center">
                   <div className="text-center">
                     <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -570,7 +676,7 @@ export default function DashboardPage() {
 
             {/* Top Pages Table */}
             <div className="grow px-5 pt-3 pb-1">
-              {isLoadingPages ? (
+              {isLoadingPages && topPages.length === 0 ? (
                 <div className="space-y-2">
                   {Array.from({ length: 4 }).map((_, i) => (
                     <div key={i} className="h-6 bg-gray-200 dark:bg-gray-700 animate-pulse rounded"></div>
@@ -645,7 +751,7 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="text-sm font-medium divide-y divide-gray-100 dark:divide-gray-700/60">
-                  {isLoadingReferrers ? (
+                  {isLoadingReferrers && topReferrers.length === 0 ? (
                     Array.from({ length: 3 }).map((_, i) => (
                       <tr key={i}>
                         <td className="p-2">
@@ -713,7 +819,7 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="text-sm font-medium divide-y divide-gray-100 dark:divide-gray-700/60">
-                  {isLoadingPages ? (
+                  {isLoadingPages && topPages.length === 0 ? (
                     Array.from({ length: 3 }).map((_, i) => (
                       <tr key={i}>
                         <td className="p-2">
@@ -781,7 +887,7 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="text-sm font-medium divide-y divide-gray-100 dark:divide-gray-700/60">
-                  {isLoadingCountries ? (
+                  {isLoadingCountries && topCountries.length === 0 ? (
                     Array.from({ length: 3 }).map((_, i) => (
                       <tr key={i}>
                         <td className="p-2">

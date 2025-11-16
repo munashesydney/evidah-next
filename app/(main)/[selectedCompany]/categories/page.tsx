@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -16,16 +16,78 @@ interface Category {
   updatedAt: string | null;
 }
 
+interface CachedCategories {
+  categories: Category[];
+  hasMore: boolean;
+  lastDocId: string | null;
+}
+
 export default function CategoriesPage() {
   const params = useParams();
   const selectedCompany = params.selectedCompany as string;
   const [categories, setCategories] = useState<Category[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  // Check if we have cached data to avoid initial loading state
+  const hasCachedData = typeof window !== 'undefined' && selectedCompany && (() => {
+    try {
+      const cached = sessionStorage.getItem(`categories-cache-${selectedCompany}`)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        return parsed.timestamp && Date.now() - parsed.timestamp < 5 * 60 * 1000 && parsed.data && Object.keys(parsed.data).length > 0
+      }
+    } catch (e) {}
+    return false
+  })()
+  const [isLoading, setIsLoading] = useState(!hasCachedData);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
+  
+  // Initialize cache from sessionStorage if available
+  const getInitialCache = (company: string): Record<string, CachedCategories> => {
+    if (typeof window === 'undefined' || !company) return {}
+    try {
+      const cached = sessionStorage.getItem(`categories-cache-${company}`)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        // Only use cache if it's less than 5 minutes old
+        if (parsed.timestamp && Date.now() - parsed.timestamp < 5 * 60 * 1000) {
+          return parsed.data || {}
+        }
+      }
+    } catch (e) {
+      console.error('Error loading cache from sessionStorage:', e)
+    }
+    return {}
+  }
+
+  const [categoriesCache, setCategoriesCache] = useState<Record<string, CachedCategories>>(() => getInitialCache(selectedCompany))
+  const categoriesCacheRef = useRef<Record<string, CachedCategories>>(getInitialCache(selectedCompany))
+  
+  // Reload cache when selectedCompany changes
+  useEffect(() => {
+    const cached = getInitialCache(selectedCompany)
+    setCategoriesCache(cached)
+    categoriesCacheRef.current = cached
+  }, [selectedCompany])
+  
+  // Keep ref in sync with state and persist to sessionStorage
+  useEffect(() => {
+    categoriesCacheRef.current = categoriesCache
+    
+    // Persist to sessionStorage
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(`categories-cache-${selectedCompany}`, JSON.stringify({
+          data: categoriesCache,
+          timestamp: Date.now(),
+        }))
+      } catch (e) {
+        console.error('Error saving cache to sessionStorage:', e)
+      }
+    }
+  }, [categoriesCache, selectedCompany])
   
   // Loading states for operations
   const [isAdding, setIsAdding] = useState(false);
@@ -33,6 +95,11 @@ export default function CategoriesPage() {
   // Pagination state
   const [hasMore, setHasMore] = useState(false);
   const [lastDocId, setLastDocId] = useState<string | null>(null);
+  
+  // Helper function to get cache key
+  const getCacheKey = (company: string, query: string) => {
+    return `${company}:${query || 'all'}`
+  }
 
   // Form state
   const [name, setName] = useState('');
@@ -57,13 +124,40 @@ export default function CategoriesPage() {
   // Fetch categories when userId is available
   useEffect(() => {
     if (userId) {
-      fetchCategories();
+      const cacheKey = getCacheKey(selectedCompany, searchQuery.trim())
+      
+      // Check cache first for instant display
+      if (categoriesCache[cacheKey]) {
+        const cached = categoriesCache[cacheKey]
+        setCategories(cached.categories)
+        setHasMore(cached.hasMore)
+        setLastDocId(cached.lastDocId)
+        setIsLoading(false)
+      } else {
+        // No cache - fetch
+        fetchCategories(true)
+      }
     }
-  }, [userId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, selectedCompany]);
 
   // Debounced search effect - reset pagination when search changes
   useEffect(() => {
     if (!userId) return;
+
+    const cacheKey = getCacheKey(selectedCompany, searchQuery.trim())
+    
+    // Check cache first for instant display
+    if (categoriesCache[cacheKey]) {
+      const cached = categoriesCache[cacheKey]
+      setCategories(cached.categories)
+      setHasMore(cached.hasMore)
+      setLastDocId(cached.lastDocId)
+      setIsLoading(false)
+    } else {
+      // No cache - show loading and fetch
+      setIsLoading(true)
+    }
 
     // Reset pagination when search query changes
     setLastDocId(null);
@@ -80,9 +174,14 @@ export default function CategoriesPage() {
   const fetchCategories = async (reset = false) => {
     if (!userId) return;
 
+    const cacheKey = getCacheKey(selectedCompany, searchQuery.trim())
+
     try {
       if (reset) {
-        setIsLoading(true);
+        // Only show loading if not in cache
+        if (!categoriesCacheRef.current[cacheKey]) {
+          setIsLoading(true);
+        }
       } else {
         setIsLoadingMore(true);
       }
@@ -100,16 +199,36 @@ export default function CategoriesPage() {
       const data = await response.json();
 
       if (data.success) {
+        let updatedCategories: Category[]
+        let updatedHasMore: boolean
+        let updatedLastDocId: string | null
+
         if (reset) {
-          setCategories(data.data.categories);
+          updatedCategories = data.data.categories
+          updatedHasMore = data.data.pagination?.hasMore || false
+          updatedLastDocId = data.data.pagination?.lastDocId || null
+          setCategories(updatedCategories)
         } else {
           // Append new categories
-          setCategories((prev) => [...prev, ...data.data.categories]);
+          updatedCategories = [...categories, ...data.data.categories]
+          updatedHasMore = data.data.pagination?.hasMore || false
+          updatedLastDocId = data.data.pagination?.lastDocId || null
+          setCategories(updatedCategories)
         }
         
         // Update pagination state
-        setHasMore(data.data.pagination?.hasMore || false);
-        setLastDocId(data.data.pagination?.lastDocId || null);
+        setHasMore(updatedHasMore)
+        setLastDocId(updatedLastDocId)
+        
+        // Update cache
+        setCategoriesCache((prev) => ({
+          ...prev,
+          [cacheKey]: {
+            categories: updatedCategories,
+            hasMore: updatedHasMore,
+            lastDocId: updatedLastDocId,
+          },
+        }))
       } else {
         console.error('Error fetching categories:', data.error);
       }
@@ -117,7 +236,7 @@ export default function CategoriesPage() {
       console.error('Error fetching categories:', error);
     } finally {
       if (reset) {
-        setTimeout(() => setIsLoading(false), 500);
+        setIsLoading(false)
       } else {
         setIsLoadingMore(false);
       }
@@ -174,6 +293,41 @@ export default function CategoriesPage() {
           updatedAt: null,
         };
         
+        // Always update the "all" cache
+        const allCacheKey = getCacheKey(selectedCompany, '')
+        const allCached = categoriesCache[allCacheKey]
+        if (allCached) {
+          const updatedAllCategories = [newCategory, ...allCached.categories]
+          setCategoriesCache((prev) => ({
+            ...prev,
+            [allCacheKey]: {
+              categories: updatedAllCategories,
+              hasMore: allCached.hasMore,
+              lastDocId: allCached.lastDocId,
+            },
+          }))
+        }
+        
+        // Also update the categories list cache (used by articles page sidebar)
+        if (typeof window !== 'undefined') {
+          try {
+            const listCacheKey = `categories-list-cache-${selectedCompany}`
+            const listCached = sessionStorage.getItem(listCacheKey)
+            if (listCached) {
+              const parsed = JSON.parse(listCached)
+              if (parsed.data && Array.isArray(parsed.data)) {
+                const updatedList = [newCategory, ...parsed.data]
+                sessionStorage.setItem(listCacheKey, JSON.stringify({
+                  data: updatedList,
+                  timestamp: Date.now(),
+                }))
+              }
+            }
+          } catch (e) {
+            console.error('Error updating categories list cache:', e)
+          }
+        }
+        
         // If there's a search query, check if the new category matches
         if (searchQuery.trim()) {
           const searchLower = searchQuery.toLowerCase();
@@ -183,11 +337,24 @@ export default function CategoriesPage() {
           
           if (matchesSearch) {
             // Add to the beginning of the list (newest first)
-            setCategories((prev) => [newCategory, ...prev]);
+            const updatedCategories = [newCategory, ...categories]
+            setCategories(updatedCategories)
+            
+            // Update search cache
+            const cacheKey = getCacheKey(selectedCompany, searchQuery.trim())
+            setCategoriesCache((prev) => ({
+              ...prev,
+              [cacheKey]: {
+                categories: updatedCategories,
+                hasMore: hasMore,
+                lastDocId: lastDocId,
+              },
+            }))
           }
         } else {
           // No search query, add to the beginning
-          setCategories((prev) => [newCategory, ...prev]);
+          const updatedCategories = [newCategory, ...categories]
+          setCategories(updatedCategories)
         }
       } else {
         setErrorMessage(data.error || 'Error creating category');
@@ -240,7 +407,54 @@ export default function CategoriesPage() {
 
       if (data.success) {
         // Remove category from state directly (no page reload)
-        setCategories((prev) => prev.filter((cat) => cat.id !== categoryId));
+        const updatedCategories = categories.filter((cat) => cat.id !== categoryId)
+        setCategories(updatedCategories)
+        
+        // Update current search cache
+        const cacheKey = getCacheKey(selectedCompany, searchQuery.trim())
+        setCategoriesCache((prev) => ({
+          ...prev,
+          [cacheKey]: {
+            categories: updatedCategories,
+            hasMore: hasMore,
+            lastDocId: lastDocId,
+          },
+        }))
+        
+        // Also update "all" cache if it exists
+        const allCacheKey = getCacheKey(selectedCompany, '')
+        const allCached = categoriesCache[allCacheKey]
+        if (allCached) {
+          const updatedAllCategories = allCached.categories.filter((cat) => cat.id !== categoryId)
+          setCategoriesCache((prev) => ({
+            ...prev,
+            [allCacheKey]: {
+              categories: updatedAllCategories,
+              hasMore: allCached.hasMore,
+              lastDocId: allCached.lastDocId,
+            },
+          }))
+        }
+        
+        // Also update the categories list cache (used by articles page sidebar)
+        if (typeof window !== 'undefined') {
+          try {
+            const listCacheKey = `categories-list-cache-${selectedCompany}`
+            const listCached = sessionStorage.getItem(listCacheKey)
+            if (listCached) {
+              const parsed = JSON.parse(listCached)
+              if (parsed.data && Array.isArray(parsed.data)) {
+                const updatedList = parsed.data.filter((cat: Category) => cat.id !== categoryId)
+                sessionStorage.setItem(listCacheKey, JSON.stringify({
+                  data: updatedList,
+                  timestamp: Date.now(),
+                }))
+              }
+            }
+          } catch (e) {
+            console.error('Error updating categories list cache:', e)
+          }
+        }
       } else {
         console.error('Error deleting category:', data.error);
         throw new Error(data.error || 'Failed to delete category');
@@ -288,6 +502,45 @@ export default function CategoriesPage() {
           updatedAt: data.data.updatedAt,
         };
         
+        // Always update the "all" cache
+        const allCacheKey = getCacheKey(selectedCompany, '')
+        const allCached = categoriesCache[allCacheKey]
+        if (allCached) {
+          const updatedAllCategories = allCached.categories.map((cat) =>
+            cat.id === categoryId ? updatedCategory : cat
+          )
+          setCategoriesCache((prev) => ({
+            ...prev,
+            [allCacheKey]: {
+              categories: updatedAllCategories,
+              hasMore: allCached.hasMore,
+              lastDocId: allCached.lastDocId,
+            },
+          }))
+        }
+        
+        // Also update the categories list cache (used by articles page sidebar)
+        if (typeof window !== 'undefined') {
+          try {
+            const listCacheKey = `categories-list-cache-${selectedCompany}`
+            const listCached = sessionStorage.getItem(listCacheKey)
+            if (listCached) {
+              const parsed = JSON.parse(listCached)
+              if (parsed.data && Array.isArray(parsed.data)) {
+                const updatedList = parsed.data.map((cat: Category) =>
+                  cat.id === categoryId ? updatedCategory : cat
+                )
+                sessionStorage.setItem(listCacheKey, JSON.stringify({
+                  data: updatedList,
+                  timestamp: Date.now(),
+                }))
+              }
+            }
+          } catch (e) {
+            console.error('Error updating categories list cache:', e)
+          }
+        }
+        
         // If there's a search query, check if the updated category still matches
         if (searchQuery.trim()) {
           const searchLower = searchQuery.toLowerCase();
@@ -297,22 +550,43 @@ export default function CategoriesPage() {
           
           if (matchesSearch) {
             // Update in place
-            setCategories((prev) =>
-              prev.map((cat) =>
-                cat.id === categoryId ? updatedCategory : cat
-              )
-            );
+            const updatedCategories = categories.map((cat) =>
+              cat.id === categoryId ? updatedCategory : cat
+            )
+            setCategories(updatedCategories)
+            
+            // Update search cache
+            const cacheKey = getCacheKey(selectedCompany, searchQuery.trim())
+            setCategoriesCache((prev) => ({
+              ...prev,
+              [cacheKey]: {
+                categories: updatedCategories,
+                hasMore: hasMore,
+                lastDocId: lastDocId,
+              },
+            }))
           } else {
             // No longer matches search, remove it from the list
-            setCategories((prev) => prev.filter((cat) => cat.id !== categoryId));
+            const updatedCategories = categories.filter((cat) => cat.id !== categoryId)
+            setCategories(updatedCategories)
+            
+            // Update search cache
+            const cacheKey = getCacheKey(selectedCompany, searchQuery.trim())
+            setCategoriesCache((prev) => ({
+              ...prev,
+              [cacheKey]: {
+                categories: updatedCategories,
+                hasMore: hasMore,
+                lastDocId: lastDocId,
+              },
+            }))
           }
         } else {
           // No search query, update in place
-          setCategories((prev) =>
-            prev.map((cat) =>
-              cat.id === categoryId ? updatedCategory : cat
-            )
-          );
+          const updatedCategories = categories.map((cat) =>
+            cat.id === categoryId ? updatedCategory : cat
+          )
+          setCategories(updatedCategories)
         }
       } else {
         console.error('Error updating category:', data.error);
@@ -392,8 +666,8 @@ export default function CategoriesPage() {
 
       {/* Cards */}
       <div className="grid grid-cols-12 gap-6">
-        {/* Loading skeletons */}
-        {isLoading &&
+        {/* Loading skeletons - only show when actually loading and no cached data */}
+        {isLoading && categories.length === 0 &&
           Array.from({ length: 9 }).map((_, index) => (
             <div
               key={index}
@@ -404,8 +678,7 @@ export default function CategoriesPage() {
           ))}
 
         {/* Category cards */}
-        {!isLoading &&
-          categories.map((category) => (
+        {categories.map((category) => (
             <CategoryCard
               key={category.id}
               id={category.id}
@@ -419,7 +692,7 @@ export default function CategoriesPage() {
           ))}
 
         {/* Empty state */}
-        {!isLoading && categories.length === 0 && !searchQuery && (
+        {categories.length === 0 && !searchQuery && !isLoading && (
           <div className="col-span-full">
             <div className="max-w-2xl m-auto mt-16">
               <div className="text-center px-4">
@@ -461,7 +734,7 @@ export default function CategoriesPage() {
         )}
 
         {/* No results state */}
-        {!isLoading && categories.length === 0 && searchQuery && (
+        {categories.length === 0 && searchQuery && !isLoading && (
           <div className="col-span-full">
             <div className="text-center px-4 py-8">
               <div className="text-gray-600 dark:text-gray-400">

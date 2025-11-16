@@ -68,6 +68,50 @@ export default function InboxInputArea({
   // Emails state
   const [emailsLoading, setEmailsLoading] = useState(false)
 
+  // Watch for AI suggestion from ticketData
+  useEffect(() => {
+    if (ticketData?.lastAISuggestion) {
+      setAiSuggestion(ticketData.lastAISuggestion)
+      setShowAiSuggestion(true)
+      setAiSuggestionCollapsed(true) // Keep collapsed state when new suggestion appears
+    } else {
+      setAiSuggestion('')
+      setShowAiSuggestion(false)
+      setAiSuggestionCollapsed(true)
+    }
+  }, [ticketData?.lastAISuggestion])
+
+  // Clear AI suggestion function
+  const clearAISuggestion = async () => {
+    if (!uid || !ticketId) return
+
+    try {
+      const response = await fetch('/api/inbox/ticket/ai-suggestion/clear', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          uid,
+          selectedCompany,
+          ticketId,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.status === 1) {
+        setShowAiSuggestion(false)
+        setAiSuggestion('')
+        setAiSuggestionCollapsed(true)
+      } else {
+        console.error('Error clearing AI suggestion:', result.message)
+      }
+    } catch (error) {
+      console.error('Error clearing AI suggestion:', error)
+    }
+  }
+
   // Fetch templates
   useEffect(() => {
     if (!uid || !selectedCompany) return
@@ -286,7 +330,11 @@ export default function InboxInputArea({
   const sendMessage = async () => {
     setError('')
     setSending(true)
-    setShowAiSuggestion(false)
+    
+    // Clear AI suggestion when sending a message
+    if (showAiSuggestion) {
+      await clearAISuggestion()
+    }
 
     try {
       // Validation
@@ -472,10 +520,7 @@ export default function InboxInputArea({
                     </svg>
                   </button>
                   <button
-                    onClick={() => {
-                      setShowAiSuggestion(false)
-                      setAiSuggestion('')
-                    }}
+                    onClick={clearAISuggestion}
                     className="text-violet-400 hover:text-violet-600 dark:text-violet-500 dark:hover:text-violet-300"
                     title="Remove suggestion permanently"
                   >
@@ -501,8 +546,7 @@ export default function InboxInputArea({
                     <button
                       onClick={() => {
                         setText(aiSuggestion)
-                        setShowAiSuggestion(false)
-                        setAiSuggestion('')
+                        clearAISuggestion()
                       }}
                       className="px-3 py-1.5 text-xs bg-violet-500 hover:bg-violet-600 text-white rounded-md transition-colors"
                     >
@@ -511,8 +555,7 @@ export default function InboxInputArea({
                     <button
                       onClick={() => {
                         setText(text + (text ? '\n\n' : '') + aiSuggestion)
-                        setShowAiSuggestion(false)
-                        setAiSuggestion('')
+                        clearAISuggestion()
                       }}
                       className="px-3 py-1.5 text-xs bg-white dark:bg-gray-800 border border-violet-300 dark:border-violet-700 text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-md transition-colors"
                     >

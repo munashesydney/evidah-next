@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -28,6 +28,12 @@ interface Category {
   description: string;
 }
 
+interface CachedArticles {
+  allArticles: Article[];
+  hasMore: boolean;
+  lastDocId: string | null;
+}
+
 export default function ArticlesPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -38,14 +44,66 @@ export default function ArticlesPage() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [allArticles, setAllArticles] = useState<Article[]>([]); // Store unfiltered articles
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  // Check if we have cached data to avoid initial loading state
+  const hasCachedData = typeof window !== 'undefined' && selectedCompany && (() => {
+    try {
+      const cached = sessionStorage.getItem(`articles-cache-${selectedCompany}`)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        return parsed.timestamp && Date.now() - parsed.timestamp < 5 * 60 * 1000 && parsed.data && Object.keys(parsed.data).length > 0
+      }
+    } catch (e) {}
+    return false
+  })()
+  const [isLoading, setIsLoading] = useState(!hasCachedData);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   
   // Filter states
   const [publishedFilter, setPublishedFilter] = useState<'all' | 'published' | 'unpublished'>('all');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'title'>('newest');
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
+  
+  // Initialize categories cache from sessionStorage
+  const getInitialCategoriesCache = (company: string): Category[] => {
+    if (typeof window === 'undefined' || !company) return []
+    try {
+      const cached = sessionStorage.getItem(`categories-list-cache-${company}`)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        // Only use cache if it's less than 5 minutes old
+        if (parsed.timestamp && Date.now() - parsed.timestamp < 5 * 60 * 1000) {
+          return parsed.data || []
+        }
+      }
+    } catch (e) {
+      console.error('Error loading categories cache from sessionStorage:', e)
+    }
+    return []
+  }
+  
+  const [categories, setCategories] = useState<Category[]>(() => getInitialCategoriesCache(selectedCompany))
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([])
+  
+  // Persist categories to sessionStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined' && categories.length > 0) {
+      try {
+        sessionStorage.setItem(`categories-list-cache-${selectedCompany}`, JSON.stringify({
+          data: categories,
+          timestamp: Date.now(),
+        }))
+      } catch (e) {
+        console.error('Error saving categories cache to sessionStorage:', e)
+      }
+    }
+  }, [categories, selectedCompany])
+  
+  // Reload categories cache when selectedCompany changes
+  useEffect(() => {
+    const cached = getInitialCategoriesCache(selectedCompany)
+    if (cached.length > 0) {
+      setCategories(cached)
+    }
+  }, [selectedCompany])
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -62,6 +120,56 @@ export default function ArticlesPage() {
   // Pagination state
   const [hasMore, setHasMore] = useState(false);
   const [lastDocId, setLastDocId] = useState<string | null>(null);
+  
+  // Initialize cache from sessionStorage if available
+  const getInitialCache = (company: string): Record<string, CachedArticles> => {
+    if (typeof window === 'undefined' || !company) return {}
+    try {
+      const cached = sessionStorage.getItem(`articles-cache-${company}`)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        // Only use cache if it's less than 5 minutes old
+        if (parsed.timestamp && Date.now() - parsed.timestamp < 5 * 60 * 1000) {
+          return parsed.data || {}
+        }
+      }
+    } catch (e) {
+      console.error('Error loading cache from sessionStorage:', e)
+    }
+    return {}
+  }
+
+  const [articlesCache, setArticlesCache] = useState<Record<string, CachedArticles>>(() => getInitialCache(selectedCompany))
+  const articlesCacheRef = useRef<Record<string, CachedArticles>>(getInitialCache(selectedCompany))
+  
+  // Reload cache when selectedCompany changes
+  useEffect(() => {
+    const cached = getInitialCache(selectedCompany)
+    setArticlesCache(cached)
+    articlesCacheRef.current = cached
+  }, [selectedCompany])
+  
+  // Keep ref in sync with state and persist to sessionStorage
+  useEffect(() => {
+    articlesCacheRef.current = articlesCache
+    
+    // Persist to sessionStorage
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(`articles-cache-${selectedCompany}`, JSON.stringify({
+          data: articlesCache,
+          timestamp: Date.now(),
+        }))
+      } catch (e) {
+        console.error('Error saving cache to sessionStorage:', e)
+      }
+    }
+  }, [articlesCache, selectedCompany])
+  
+  // Helper function to get cache key
+  const getCacheKey = (company: string, query: string, categoryId: string) => {
+    return `${company}:${query || 'all'}:${categoryId || 'all'}`
+  }
 
   // Form state for Add
   const [title, setTitle] = useState('');
@@ -104,6 +212,24 @@ export default function ArticlesPage() {
   const fetchCategories = async () => {
     if (!userId) return;
 
+    // Check cache first
+    const cached = getInitialCategoriesCache(selectedCompany)
+    if (cached.length > 0) {
+      setCategories(cached)
+      // Still fetch in background to update cache
+      fetch(`/api/category?uid=${userId}&selectedCompany=${selectedCompany}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.data.categories) {
+            setCategories(data.data.categories || [])
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching categories in background:', error)
+        })
+      return
+    }
+
     try {
       const response = await fetch(
         `/api/category?uid=${userId}&selectedCompany=${selectedCompany}`
@@ -131,16 +257,47 @@ export default function ArticlesPage() {
   // Fetch articles when userId is available or categoryId changes
   useEffect(() => {
     if (userId) {
+      const cacheKey = getCacheKey(selectedCompany, searchQuery.trim(), categoryIdFromUrl || '')
+      
+      // Check cache first for instant display (use ref to get latest value)
+      const cached = articlesCacheRef.current[cacheKey]
+      if (cached) {
+        setAllArticles(cached.allArticles)
+        setArticles(applyFilters(cached.allArticles))
+        setHasMore(cached.hasMore)
+        setLastDocId(cached.lastDocId)
+        setIsLoading(false)
+      } else {
+        // No cache - show loading and fetch
+        setIsLoading(true)
+      }
+      
       setLastDocId(null);
       setHasMore(false);
       // Use categoryIdFromUrl if it exists (supports multiple IDs)
       fetchArticles(true, categoryIdFromUrl || '');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, categoryIdFromUrl]);
 
   // Debounced search effect
   useEffect(() => {
     if (!userId) return;
+
+    const cacheKey = getCacheKey(selectedCompany, searchQuery.trim(), categoryIdFromUrl || '')
+    
+    // Check cache first for instant display (use ref to get latest value)
+    const cached = articlesCacheRef.current[cacheKey]
+    if (cached) {
+      setAllArticles(cached.allArticles)
+      setArticles(applyFilters(cached.allArticles))
+      setHasMore(cached.hasMore)
+      setLastDocId(cached.lastDocId)
+      setIsLoading(false)
+    } else {
+      // No cache - show loading and fetch
+      setIsLoading(true)
+    }
 
     setLastDocId(null);
     setHasMore(false);
@@ -156,9 +313,14 @@ export default function ArticlesPage() {
   const fetchArticles = async (reset = false, categoryIdToUse?: string) => {
     if (!userId) return;
 
+    const cacheKey = getCacheKey(selectedCompany, searchQuery.trim(), categoryIdToUse !== undefined ? categoryIdToUse : (categoryIdFromUrl || ''))
+
     try {
       if (reset) {
-        setIsLoading(true);
+        // Only show loading if not in cache
+        if (!articlesCacheRef.current[cacheKey]) {
+          setIsLoading(true);
+        }
       } else {
         setIsLoadingMore(true);
       }
@@ -184,17 +346,36 @@ export default function ArticlesPage() {
 
       if (data.success) {
         const fetchedArticles = data.data.articles;
+        let updatedAllArticles: Article[]
+        let updatedHasMore: boolean
+        let updatedLastDocId: string | null
+
         if (reset) {
-          setAllArticles(fetchedArticles);
-          setArticles(applyFilters(fetchedArticles));
+          updatedAllArticles = fetchedArticles
+          updatedHasMore = data.data.pagination?.hasMore || false
+          updatedLastDocId = data.data.pagination?.lastDocId || null
+          setAllArticles(updatedAllArticles);
+          setArticles(applyFilters(updatedAllArticles));
         } else {
-          const combined = [...allArticles, ...fetchedArticles];
-          setAllArticles(combined);
-          setArticles(applyFilters(combined));
+          updatedAllArticles = [...allArticles, ...fetchedArticles]
+          updatedHasMore = data.data.pagination?.hasMore || false
+          updatedLastDocId = data.data.pagination?.lastDocId || null
+          setAllArticles(updatedAllArticles);
+          setArticles(applyFilters(updatedAllArticles));
         }
 
-        setHasMore(data.data.pagination?.hasMore || false);
-        setLastDocId(data.data.pagination?.lastDocId || null);
+        setHasMore(updatedHasMore)
+        setLastDocId(updatedLastDocId)
+        
+        // Update cache
+        setArticlesCache((prev) => ({
+          ...prev,
+          [cacheKey]: {
+            allArticles: updatedAllArticles,
+            hasMore: updatedHasMore,
+            lastDocId: updatedLastDocId,
+          },
+        }))
       } else {
         console.error('Error fetching articles:', data.error);
       }
@@ -202,7 +383,7 @@ export default function ArticlesPage() {
       console.error('Error fetching articles:', error);
     } finally {
       if (reset) {
-        setTimeout(() => setIsLoading(false), 500);
+        setIsLoading(false)
       } else {
         setIsLoadingMore(false);
       }
@@ -268,11 +449,27 @@ export default function ArticlesPage() {
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     window.history.pushState({}, '', newUrl);
     
+    const newCategoryIdString = newSelectedIds.join(',')
+    const cacheKey = getCacheKey(selectedCompany, searchQuery.trim(), newCategoryIdString)
+    
+    // Check cache first for instant display (use ref to get latest value)
+    const cached = articlesCacheRef.current[cacheKey]
+    if (cached) {
+      setAllArticles(cached.allArticles)
+      setArticles(applyFilters(cached.allArticles))
+      setHasMore(cached.hasMore)
+      setLastDocId(cached.lastDocId)
+      setIsLoading(false)
+    } else {
+      // No cache - show loading and fetch
+      setIsLoading(true)
+    }
+    
     // Trigger re-fetch
     setSelectedCategoryIds(newSelectedIds);
     setLastDocId(null);
     setHasMore(false);
-    fetchArticles(true, newSelectedIds.join(','));
+    fetchArticles(true, newCategoryIdString);
   };
 
   const handleLoadMore = () => {
@@ -344,16 +541,38 @@ export default function ArticlesPage() {
           newArticle.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
           newArticle.description.toLowerCase().includes(searchQuery.toLowerCase());
         
+        const updatedAllArticles = [newArticle, ...allArticles]
+        setAllArticles(updatedAllArticles)
+        
         if (matchesCategoryFilter && matchesSearch) {
-          // Add to allArticles and apply filters
-          setAllArticles((prev) => [newArticle, ...prev]);
-          setArticles((prev) => {
-            const updated = [newArticle, ...prev];
-            return applyFilters(updated);
-          });
-        } else {
-          // Still add to allArticles but it won't show due to filters
-          setAllArticles((prev) => [newArticle, ...prev]);
+          // Add to visible articles and apply filters
+          const updatedArticles = applyFilters([newArticle, ...articles])
+          setArticles(updatedArticles)
+        }
+        
+        // Update cache for current view
+        const cacheKey = getCacheKey(selectedCompany, searchQuery.trim(), categoryIdFromUrl || '')
+        setArticlesCache((prev) => ({
+          ...prev,
+          [cacheKey]: {
+            allArticles: updatedAllArticles,
+            hasMore: hasMore,
+            lastDocId: lastDocId,
+          },
+        }))
+        
+        // Also update "all" cache (no filters)
+        const allCacheKey = getCacheKey(selectedCompany, '', '')
+        const allCached = articlesCache[allCacheKey]
+        if (allCached) {
+          setArticlesCache((prev) => ({
+            ...prev,
+            [allCacheKey]: {
+              allArticles: [newArticle, ...allCached.allArticles],
+              hasMore: allCached.hasMore,
+              lastDocId: allCached.lastDocId,
+            },
+          }))
         }
       } else {
         setErrorMessage(data.error || 'Error creating article');
@@ -451,11 +670,10 @@ export default function ArticlesPage() {
         };
         
         // Update in allArticles
-        setAllArticles((prev) =>
-          prev.map((article) =>
-            article.id === updatedArticle.id ? updatedArticle : article
-          )
-        );
+        const updatedAllArticles = allArticles.map((article) =>
+          article.id === updatedArticle.id ? updatedArticle : article
+        )
+        setAllArticles(updatedAllArticles)
         
         // Check if article matches current filters
         const matchesCategoryFilter = !categoryIdFromUrl || 
@@ -470,22 +688,47 @@ export default function ArticlesPage() {
           
           if (wasVisible) {
             // Update in filtered articles
-            setArticles((prev) => {
-              const updated = prev.map((article) =>
+            const updatedArticles = applyFilters(
+              articles.map((article) =>
                 article.id === updatedArticle.id ? updatedArticle : article
-              );
-              return applyFilters(updated);
-            });
+              )
+            )
+            setArticles(updatedArticles)
           } else {
             // Wasn't visible before, but now matches - add it
-            setArticles((prev) => {
-              const updated = [updatedArticle, ...prev];
-              return applyFilters(updated);
-            });
+            const updatedArticles = applyFilters([updatedArticle, ...articles])
+            setArticles(updatedArticles)
           }
         } else {
           // No longer matches filters, remove from visible list if it was there
           setArticles((prev) => prev.filter((article) => article.id !== updatedArticle.id));
+        }
+        
+        // Update cache for current view
+        const cacheKey = getCacheKey(selectedCompany, searchQuery.trim(), categoryIdFromUrl || '')
+        setArticlesCache((prev) => ({
+          ...prev,
+          [cacheKey]: {
+            allArticles: updatedAllArticles,
+            hasMore: hasMore,
+            lastDocId: lastDocId,
+          },
+        }))
+        
+        // Also update "all" cache (no filters)
+        const allCacheKey = getCacheKey(selectedCompany, '', '')
+        const allCached = articlesCache[allCacheKey]
+        if (allCached) {
+          setArticlesCache((prev) => ({
+            ...prev,
+            [allCacheKey]: {
+              allArticles: allCached.allArticles.map((article) =>
+                article.id === updatedArticle.id ? updatedArticle : article
+              ),
+              hasMore: allCached.hasMore,
+              lastDocId: allCached.lastDocId,
+            },
+          }))
         }
       } else {
         setEditErrorMessage(data.error || 'Error updating article');
@@ -547,8 +790,35 @@ export default function ArticlesPage() {
         setArticleToDelete(null);
         
         // Remove article from state directly (no page reload)
-        setAllArticles((prev) => prev.filter((article) => article.id !== articleToDelete.id));
-        setArticles((prev) => prev.filter((article) => article.id !== articleToDelete.id));
+        const updatedAllArticles = allArticles.filter((article) => article.id !== articleToDelete.id)
+        const updatedArticles = articles.filter((article) => article.id !== articleToDelete.id)
+        setAllArticles(updatedAllArticles)
+        setArticles(updatedArticles)
+        
+        // Update cache for current view
+        const cacheKey = getCacheKey(selectedCompany, searchQuery.trim(), categoryIdFromUrl || '')
+        setArticlesCache((prev) => ({
+          ...prev,
+          [cacheKey]: {
+            allArticles: updatedAllArticles,
+            hasMore: hasMore,
+            lastDocId: lastDocId,
+          },
+        }))
+        
+        // Also update "all" cache (no filters)
+        const allCacheKey = getCacheKey(selectedCompany, '', '')
+        const allCached = articlesCache[allCacheKey]
+        if (allCached) {
+          setArticlesCache((prev) => ({
+            ...prev,
+            [allCacheKey]: {
+              allArticles: allCached.allArticles.filter((article) => article.id !== articleToDelete.id),
+              hasMore: allCached.hasMore,
+              lastDocId: allCached.lastDocId,
+            },
+          }))
+        }
       } else {
         console.error('Error deleting article:', data.error);
       }
@@ -769,8 +1039,8 @@ export default function ArticlesPage() {
         <div className="flex-1">
       {/* Articles list */}
       <div className="space-y-4">
-        {/* Loading skeletons */}
-        {isLoading &&
+        {/* Loading skeletons - only show when actually loading and no cached data */}
+        {isLoading && articles.length === 0 &&
           Array.from({ length: 6 }).map((_, index) => (
             <div
               key={index}
@@ -782,8 +1052,7 @@ export default function ArticlesPage() {
           ))}
 
         {/* Article items */}
-        {!isLoading &&
-          articles.map((article) => (
+        {articles.map((article) => (
             <div
               key={article.id}
               className="bg-white dark:bg-gray-800 shadow-sm rounded-lg p-6 hover:shadow-md transition-shadow"
@@ -867,7 +1136,7 @@ export default function ArticlesPage() {
           ))}
 
         {/* Empty state */}
-        {!isLoading && articles.length === 0 && !searchQuery && (
+        {articles.length === 0 && !searchQuery && !isLoading && (
           <div className="text-center py-12">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-t from-gray-200 to-gray-100 dark:from-gray-700 dark:to-gray-800 mb-4">
               <svg className="w-8 h-8 fill-current text-gray-400" viewBox="0 0 20 20">
@@ -895,7 +1164,7 @@ export default function ArticlesPage() {
         )}
 
         {/* No results state */}
-        {!isLoading && articles.length === 0 && searchQuery && (
+        {articles.length === 0 && searchQuery && !isLoading && (
           <div className="text-center py-12">
             <p className="text-gray-600 dark:text-gray-400">
               No articles found matching &quot;{searchQuery}&quot;

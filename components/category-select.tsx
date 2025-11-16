@@ -25,13 +25,55 @@ export default function CategorySelect({
   selectedCompany,
   required = false,
 }: CategorySelectProps) {
-  const [categories, setCategories] = useState<Category[]>([]);
+  // Initialize categories cache from sessionStorage
+  const getInitialCategoriesCache = (company: string): Category[] => {
+    if (typeof window === 'undefined' || !company) return []
+    try {
+      const cached = sessionStorage.getItem(`categories-list-cache-${company}`)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        // Only use cache if it's less than 5 minutes old
+        if (parsed.timestamp && Date.now() - parsed.timestamp < 5 * 60 * 1000) {
+          return parsed.data || []
+        }
+      }
+    } catch (e) {
+      console.error('Error loading categories cache from sessionStorage:', e)
+    }
+    return []
+  }
+  
+  const [categories, setCategories] = useState<Category[]>(() => getInitialCategoriesCache(selectedCompany));
   const [searchQuery, setSearchQuery] = useState('');
+  // Only show loading if we don't have cached data
+  const hasCachedCategories = getInitialCategoriesCache(selectedCompany).length > 0
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
   const searchInputRef = useRef<HTMLInputElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Persist categories to sessionStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined' && categories.length > 0) {
+      try {
+        sessionStorage.setItem(`categories-list-cache-${selectedCompany}`, JSON.stringify({
+          data: categories,
+          timestamp: Date.now(),
+        }))
+      } catch (e) {
+        console.error('Error saving categories cache to sessionStorage:', e)
+      }
+    }
+  }, [categories, selectedCompany])
+  
+  // Reload categories cache when selectedCompany changes
+  useEffect(() => {
+    const cached = getInitialCategoriesCache(selectedCompany)
+    if (cached.length > 0) {
+      setCategories(cached)
+    }
+  }, [selectedCompany])
 
   // Fetch categories
   useEffect(() => {
@@ -42,6 +84,25 @@ export default function CategorySelect({
 
   const fetchCategories = async () => {
     if (!userId) return;
+
+    // Check cache first
+    const cached = getInitialCategoriesCache(selectedCompany)
+    if (cached.length > 0) {
+      setCategories(cached)
+      setIsLoading(false)
+      // Still fetch in background to update cache (silent refresh)
+      fetch(`/api/category?uid=${userId}&selectedCompany=${selectedCompany}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.data.categories) {
+            setCategories(data.data.categories || [])
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching categories in background:', error)
+        })
+      return
+    }
 
     try {
       setIsLoading(true);

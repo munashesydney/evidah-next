@@ -427,7 +427,6 @@ export default function ChatPage() {
       console.log('✅ AI response completed')
       
       // Wait for ALL processing to complete, including recursive turns
-      // When a tool is called, processMessages is called recursively to get the assistant's response
       console.log('⏳ Waiting for all processing to complete...')
       console.log('📊 Starting message count:', currentMessages.length)
       
@@ -443,20 +442,14 @@ export default function ChatPage() {
         const currentCount = allMessages.length
         const isLoading = useConversationStore.getState().isAssistantLoading
         
-        // Check if we have an assistant message in the NEW messages (after the original count)
-        const newMsgs = allMessages.slice(currentMessages.length + 1) // Skip user message we already saved
+        const newMsgs = allMessages.slice(currentMessages.length + 1)
         const hasAssistantMessage = newMsgs.some(m => m.type === 'message' && m.role === 'assistant')
         const hasToolCalls = newMsgs.some(m => m.type === 'tool_call')
         
         console.log(`⏳ Attempt ${attempts}: total=${currentCount}, new=${newMsgs.length}, loading=${isLoading}, toolCalls=${hasToolCalls}, assistant=${hasAssistantMessage}, stable=${stableCount}`)
         
-        // We're done when:
-        // 1. Not loading
-        // 2. Messages are stable for multiple checks
-        // 3. If there are tool calls, we must have an assistant message too
         if (currentCount === lastMessageCount && !isLoading) {
           stableCount++
-          // If we have tool calls but no assistant message yet, keep waiting
           const hasPendingToolCalls = hasToolCalls && !hasAssistantMessage
           
           if (stableCount >= 5 && !hasPendingToolCalls) {
@@ -478,36 +471,19 @@ export default function ChatPage() {
       const updatedMessages = useConversationStore.getState().chatMessages
       console.log('📊 Total messages after AI:', updatedMessages.length)
       
-      const newMessages = updatedMessages.slice(currentMessages.length + 1) // Skip the user message we already saved
+      const newMessages = updatedMessages.slice(currentMessages.length + 1)
       console.log('📊 New messages to process:', newMessages.length)
-      console.log('📋 New messages detail:', JSON.stringify(newMessages.map(m => ({
-        type: m.type,
-        role: m.type === 'message' ? m.role : undefined,
-        tool_type: m.type === 'tool_call' ? m.tool_type : undefined,
-        name: m.type === 'tool_call' ? m.name : undefined,
-        status: m.type === 'tool_call' ? m.status : undefined,
-        hasOutput: m.type === 'tool_call' ? !!m.output : undefined,
-        contentLength: m.type === 'message' ? m.content[0]?.text?.length : undefined
-      })), null, 2))
       
-      // Find assistant messages and their tool calls
-      let assistantContent = ''
-      const toolCalls: any[] = []
+      // Group and save each assistant message with its preceding tool calls
+      const messagesToSave: Array<{content: string, toolCalls: any[]}> = []
+      let currentToolCalls: any[] = []
       
       for (const item of newMessages) {
-        if (item.type === 'message' && item.role === 'assistant') {
-          // Get the actual text content
-          const text = item.content[0]?.text || ''
-          console.log('📝 Found assistant message, length:', text.length)
-          if (text) {
-            assistantContent = text
-          }
-        } else if (item.type === 'tool_call') {
+        if (item.type === 'tool_call') {
           console.log(`🔧 Found tool call: ${item.name}, status: ${item.status}, has output: ${!!item.output}`)
-          // Only save completed tool calls
           if (item.status === 'completed') {
             console.log(`✅ Adding completed tool call: ${item.name}`)
-            toolCalls.push({
+            currentToolCalls.push({
               id: item.id,
               type: item.tool_type,
               name: item.name,
@@ -525,43 +501,51 @@ export default function ChatPage() {
           } else {
             console.log(`⚠️ Skipping non-completed tool call: ${item.name} (status: ${item.status})`)
           }
+        } else if (item.type === 'message' && item.role === 'assistant') {
+          const text = item.content[0]?.text || ''
+          console.log('📝 Found assistant message, length:', text.length)
+          if (text.trim()) {
+            messagesToSave.push({
+              content: text,
+              toolCalls: [...currentToolCalls]
+            })
+            currentToolCalls = []
+          }
         }
       }
       
-      console.log('📊 Summary - Assistant content length:', assistantContent.length, 'Tool calls:', toolCalls.length)
-      console.log('🔧 Tool calls to save:', JSON.stringify(toolCalls.map(tc => ({
-        name: tc.name,
-        status: tc.status,
-        hasOutput: !!tc.output,
-        outputPreview: tc.output?.substring(0, 100)
-      })), null, 2))
+      console.log('📊 Summary - Messages to save:', messagesToSave.length)
       
-      // Save assistant message with tool calls only if we have content
-      if (assistantContent) {
-        console.log('💾 Saving assistant message with', toolCalls.length, 'tool calls...')
-        const saveResponse = await fetch(`/api/chat/${currentActiveChat.id}/messages/create`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            content: assistantContent,
-            role: 'assistant',
-            companyId: selectedCompany,
-            toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-          }),
-        })
+      // Save each assistant message separately
+      for (let i = 0; i < messagesToSave.length; i++) {
+        const msg = messagesToSave[i]
+        console.log(`💾 Saving message ${i + 1}/${messagesToSave.length} with ${msg.toolCalls.length} tool calls...`)
         
-        if (!saveResponse.ok) {
-          const errorData = await saveResponse.json()
-          console.error('❌ Failed to save assistant message:', errorData)
-        } else {
-          const savedData = await saveResponse.json()
-          console.log('✅ Assistant message saved:', savedData)
+        try {
+          const saveResponse = await fetch(`/api/chat/${currentActiveChat.id}/messages/create`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              content: msg.content,
+              role: 'assistant',
+              companyId: selectedCompany,
+              toolCalls: msg.toolCalls.length > 0 ? msg.toolCalls : undefined,
+            }),
+          })
+          
+          if (!saveResponse.ok) {
+            const errorData = await saveResponse.json()
+            console.error(`❌ Failed to save message ${i + 1}:`, errorData)
+          } else {
+            const savedData = await saveResponse.json()
+            console.log(`✅ Message ${i + 1} saved:`, savedData)
+          }
+        } catch (error) {
+          console.error(`❌ Error saving message ${i + 1}:`, error)
         }
-      } else {
-        console.log('⚠️ No assistant content to save')
       }
       
       console.log('🏁 === SEND MESSAGE END ===')
