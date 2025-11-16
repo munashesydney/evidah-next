@@ -426,46 +426,36 @@ export default function ChatPage() {
       await processMessages(userId, selectedCompany, employeeId, personalityLevel)
       console.log('✅ AI response completed')
       
-      // Wait for ALL processing to complete, including recursive turns
-      console.log('⏳ Waiting for all processing to complete...')
-      console.log('📊 Starting message count:', currentMessages.length)
+      // Wait for all recursive processing to truly complete
+      // The issue is that processMessages returns before recursive calls finish
+      console.log('⏳ Waiting for all recursive processing to complete...')
+      let waitAttempts = 0
+      let lastCount = useConversationStore.getState().chatMessages.length
+      let stableFor = 0
       
-      let attempts = 0
-      let lastMessageCount = useConversationStore.getState().chatMessages.length
-      let stableCount = 0
-      
-      while (attempts < 150) {
-        await new Promise(resolve => setTimeout(resolve, 200))
-        attempts++
+      while (waitAttempts < 100) {
+        await new Promise(resolve => setTimeout(resolve, 300))
+        waitAttempts++
         
-        const allMessages = useConversationStore.getState().chatMessages
-        const currentCount = allMessages.length
+        const currentCount = useConversationStore.getState().chatMessages.length
         const isLoading = useConversationStore.getState().isAssistantLoading
         
-        const newMsgs = allMessages.slice(currentMessages.length + 1)
-        const hasAssistantMessage = newMsgs.some(m => m.type === 'message' && m.role === 'assistant')
-        const hasToolCalls = newMsgs.some(m => m.type === 'tool_call')
-        
-        console.log(`⏳ Attempt ${attempts}: total=${currentCount}, new=${newMsgs.length}, loading=${isLoading}, toolCalls=${hasToolCalls}, assistant=${hasAssistantMessage}, stable=${stableCount}`)
-        
-        if (currentCount === lastMessageCount && !isLoading) {
-          stableCount++
-          const hasPendingToolCalls = hasToolCalls && !hasAssistantMessage
+        if (currentCount === lastCount && !isLoading) {
+          stableFor++
+          console.log(`⏳ Wait attempt ${waitAttempts}: count=${currentCount}, stable for ${stableFor}`)
           
-          if (stableCount >= 5 && !hasPendingToolCalls) {
-            console.log('✅ Messages stabilized, processing complete')
+          // Need to be stable for at least 10 checks (3 seconds)
+          if (stableFor >= 10) {
+            console.log('✅ Messages truly stabilized')
             break
           }
-          
-          if (hasPendingToolCalls && stableCount < 20) {
-            console.log('⏳ Tool calls found, waiting for assistant response...')
-          }
         } else {
-          stableCount = 0
-          lastMessageCount = currentCount
+          stableFor = 0
+          lastCount = currentCount
+          console.log(`⏳ Wait attempt ${waitAttempts}: count changed to ${currentCount}, resetting stability`)
         }
       }
-      console.log(`✅ Processing finished after ${attempts} attempts with ${useConversationStore.getState().chatMessages.length} total messages`)
+      console.log('✅ Wait complete')
       
       // After AI response, save assistant message with tool calls
       const updatedMessages = useConversationStore.getState().chatMessages
