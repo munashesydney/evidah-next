@@ -372,11 +372,9 @@ export default function ChatPage() {
       }
     }
 
-    const { addConversationItem, addChatMessage, setAssistantLoading, chatMessages: currentMessages } = useConversationStore.getState()
-    const { processMessages } = await import('@/lib/chat/assistant')
+    const { addConversationItem, addChatMessage, setAssistantLoading, conversationItems, setChatMessages } = useConversationStore.getState()
 
     console.log('🚀 === SEND MESSAGE START ===')
-    console.log('📊 Current messages count:', currentMessages.length)
 
     const userItem = {
       type: 'message' as const,
@@ -395,149 +393,113 @@ export default function ChatPage() {
       addConversationItem(userMessage)
       addChatMessage(userItem)
 
-      // Save user message to database via API
+      // Get auth token
       const token = await auth.currentUser?.getIdToken()
       if (!token) {
         throw new Error('Not authenticated')
       }
 
-      console.log('💾 Saving user message...')
-      const response = await fetch(`/api/chat/${currentActiveChat.id}/messages/create`, {
+      // Build conversation history for context
+      const conversationHistory = conversationItems.map((item: any) => ({
+        role: item.role,
+        content: typeof item.content === 'string' ? item.content : item.content[0]?.text || '',
+      }))
+
+      console.log('🤖 Calling server-side processor...')
+
+      // Call the new server-side API that handles everything
+      const response = await fetch(`/api/chat/${currentActiveChat.id}/respond`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          content: message.trim(),
-          role: 'user',
+          message: message.trim(),
           companyId: selectedCompany,
+          employeeId,
+          personalityLevel,
+          conversationHistory,
         }),
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error?.message || 'Failed to save message')
+        throw new Error('Failed to process message')
       }
-      console.log('✅ User message saved')
 
-      // Process AI response
-      console.log('🤖 Starting AI response...')
-      await processMessages(userId, selectedCompany, employeeId, personalityLevel)
-      console.log('✅ AI response completed')
-      
-      // Wait for all recursive processing to truly complete
-      // The issue is that processMessages returns before recursive calls finish
-      console.log('⏳ Waiting for all recursive processing to complete...')
-      let waitAttempts = 0
-      let lastCount = useConversationStore.getState().chatMessages.length
-      let stableFor = 0
-      
-      while (waitAttempts < 100) {
-        await new Promise(resolve => setTimeout(resolve, 300))
-        waitAttempts++
-        
-        const currentCount = useConversationStore.getState().chatMessages.length
-        const isLoading = useConversationStore.getState().isAssistantLoading
-        
-        if (currentCount === lastCount && !isLoading) {
-          stableFor++
-          console.log(`⏳ Wait attempt ${waitAttempts}: count=${currentCount}, stable for ${stableFor}`)
-          
-          // Need to be stable for at least 10 checks (3 seconds)
-          if (stableFor >= 10) {
-            console.log('✅ Messages truly stabilized')
-            break
-          }
-        } else {
-          stableFor = 0
-          lastCount = currentCount
-          console.log(`⏳ Wait attempt ${waitAttempts}: count changed to ${currentCount}, resetting stability`)
-        }
-      }
-      console.log('✅ Wait complete')
-      
-      // After AI response, save assistant message with tool calls
-      const updatedMessages = useConversationStore.getState().chatMessages
-      console.log('📊 Total messages after AI:', updatedMessages.length)
-      
-      const newMessages = updatedMessages.slice(currentMessages.length + 1)
-      console.log('📊 New messages to process:', newMessages.length)
-      
-      // Group and save each assistant message with its preceding tool calls
-      const messagesToSave: Array<{content: string, toolCalls: any[]}> = []
-      let currentToolCalls: any[] = []
-      
-      for (const item of newMessages) {
-        if (item.type === 'tool_call') {
-          console.log(`🔧 Found tool call: ${item.name}, status: ${item.status}, has output: ${!!item.output}`)
-          if (item.status === 'completed') {
-            console.log(`✅ Adding completed tool call: ${item.name}`)
-            currentToolCalls.push({
-              id: item.id,
-              type: item.tool_type,
-              name: item.name,
-              arguments: item.arguments,
-              parsedArguments: item.parsedArguments,
-              output: item.output,
-              status: item.status,
-              code: item.code,
-              files: item.files?.map((f: any) => ({
-                file_id: f.file_id,
-                filename: f.filename,
-                container_id: f.container_id,
-              })),
-            })
-          } else {
-            console.log(`⚠️ Skipping non-completed tool call: ${item.name} (status: ${item.status})`)
-          }
-        } else if (item.type === 'message' && item.role === 'assistant') {
-          const text = item.content[0]?.text || ''
-          console.log('📝 Found assistant message, length:', text.length)
-          if (text.trim()) {
-            messagesToSave.push({
-              content: text,
-              toolCalls: [...currentToolCalls]
-            })
-            currentToolCalls = []
+      // Stream the response
+      const reader = response.body!.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6)
+            try {
+              const event = JSON.parse(dataStr)
+              
+              switch (event.type) {
+                case 'message_delta':
+                  // Update UI with streaming text (optional - for now just log)
+                  console.log('📝 Message delta:', event.data.text?.substring(0, 50))
+                  break
+                
+                case 'tool_call_start':
+                  console.log('🔧 Tool call started:', event.data.name)
+                  break
+                
+                case 'tool_call_complete':
+                  console.log('✅ Tool call completed:', event.data.name)
+                  break
+                
+                case 'assistant_message_saved':
+                  console.log('💾 Message saved:', event.data.messageNumber)
+                  break
+                
+                case 'done':
+                  console.log('🏁 Processing complete:', event.data)
+                  break
+                
+                case 'error':
+                  console.error('❌ Error:', event.data.error)
+                  throw new Error(event.data.error)
+              }
+            } catch (parseError) {
+              console.error('Failed to parse event:', parseError)
+            }
           }
         }
       }
-      
-      console.log('📊 Summary - Messages to save:', messagesToSave.length)
-      
-      // Save each assistant message separately
-      for (let i = 0; i < messagesToSave.length; i++) {
-        const msg = messagesToSave[i]
-        console.log(`💾 Saving message ${i + 1}/${messagesToSave.length} with ${msg.toolCalls.length} tool calls...`)
-        
-        try {
-          const saveResponse = await fetch(`/api/chat/${currentActiveChat.id}/messages/create`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              content: msg.content,
-              role: 'assistant',
-              companyId: selectedCompany,
-              toolCalls: msg.toolCalls.length > 0 ? msg.toolCalls : undefined,
-            }),
-          })
-          
-          if (!saveResponse.ok) {
-            const errorData = await saveResponse.json()
-            console.error(`❌ Failed to save message ${i + 1}:`, errorData)
-          } else {
-            const savedData = await saveResponse.json()
-            console.log(`✅ Message ${i + 1} saved:`, savedData)
-          }
-        } catch (error) {
-          console.error(`❌ Error saving message ${i + 1}:`, error)
+
+      console.log('✅ Stream complete - reloading messages...')
+
+      // Reload messages from database to get the saved assistant responses
+      const messagesResponse = await fetch(
+        `/api/chat/${currentActiveChat.id}/messages/list?companyId=${selectedCompany}&page=1&limit=100`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         }
+      )
+
+      if (messagesResponse.ok) {
+        const data = await messagesResponse.json()
+        const { convertMessagesToItems } = await import('@/lib/chat/message-converter')
+        const items = convertMessagesToItems(data.messages)
+        setChatMessages(items)
+        console.log('✅ Messages reloaded from database')
       }
-      
+
+      setAssistantLoading(false)
       console.log('🏁 === SEND MESSAGE END ===')
     } catch (error) {
       console.error('❌ Error processing message:', error)
