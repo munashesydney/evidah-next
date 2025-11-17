@@ -11,6 +11,7 @@ import { doc, getDoc } from 'firebase/firestore';
 export default function Onboarding() {
   const [currentStep, setCurrentStep] = useState(1);
   const [currentSubstep, setCurrentSubstep] = useState(1); // For step 3 substeps
+  const [name, setName] = useState('');
   const [industry, setIndustry] = useState('');
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,6 +26,32 @@ export default function Onboarding() {
   const [awaitingVerification, setAwaitingVerification] = useState(false);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
   const router = useRouter();
+
+  const getFirstName = (fullName?: string | null) => {
+    if (!fullName) return '';
+    const trimmed = fullName.trim();
+    if (!trimmed) return '';
+    return trimmed.split(/\s+/)[0];
+  };
+
+  const sendContactToMautic = async (contactEmail?: string | null, contactFirstName?: string | null) => {
+    if (!contactEmail) return;
+    try {
+      await fetch('/api/mautic', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: contactEmail,
+          firstname: contactFirstName || null,
+          segment_id: 9,
+        }),
+      });
+    } catch (mauticError) {
+      console.error('Failed to sync contact with Mautic:', mauticError);
+    }
+  };
 
   const industries = [
     'Technology',
@@ -180,6 +207,8 @@ export default function Onboarding() {
       
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      await sendContactToMautic(user.email, getFirstName(user.displayName));
       
       // Store onboarding data in localStorage for checkout
       if (typeof window !== 'undefined') {
@@ -205,6 +234,8 @@ export default function Onboarding() {
       
       const provider = new OAuthProvider('apple.com');
       const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      await sendContactToMautic(user.email, getFirstName(user.displayName));
       
       // Store onboarding data in localStorage for checkout
       if (typeof window !== 'undefined') {
@@ -224,6 +255,10 @@ export default function Onboarding() {
   };
 
   const handleEmailNext = () => {
+    if (!name.trim()) {
+      setError('Please enter your name');
+      return;
+    }
     if (!email || !email.includes('@')) {
       setError('Please enter a valid email address');
       return;
@@ -245,6 +280,7 @@ export default function Onboarding() {
       // Create user account
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
+      await sendContactToMautic(user.email, name.trim());
 
       // Send verification email
       await sendEmailVerification(user);
@@ -388,6 +424,19 @@ export default function Onboarding() {
                   <div className="mb-4">
                     <div className="mb-4">
                       <label className="block text-sm font-medium mb-2 text-gray-900">
+                        Name
+                      </label>
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="Jane"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent text-gray-900"
+                        autoFocus={!isSmallScreen}
+                      />
+                    </div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium mb-2 text-gray-900">
                         Email Address
                       </label>
                       <input
@@ -401,7 +450,6 @@ export default function Onboarding() {
                         }}
                         placeholder="you@example.com"
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent text-gray-900"
-                        autoFocus={!isSmallScreen}
                       />
                     </div>
                     <button
