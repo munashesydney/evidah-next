@@ -96,7 +96,14 @@ async function handleEscalateToHuman(args: Record<string, any>): Promise<{ succe
 
     const chatId = chat.id;
 
-    // Add initial message to the chat describing the question
+    // Add a simple "Hello" user message first to start the conversation properly
+    // This ensures the chat doesn't start with an assistant message
+    await MessageService.createMessage(uid, companyId, chatId, {
+      content: 'Hello',
+      role: 'user',
+    });
+
+    // Add the question message from the assistant
     // This comes from the assistant side since it's the AI asking the question
     const questionMessage = `I need your help with a customer question. I'm not 100% certain about the answer and want to make sure I provide accurate information.
 

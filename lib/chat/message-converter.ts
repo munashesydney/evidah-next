@@ -83,3 +83,14 @@ export function convertMessagesToItems(messages: Message[]): Item[] {
   
   return items
 }
+
+/**
+ * Convert messages to conversation history format for API calls
+ * This extracts just the role and content for sending to the AI
+ */
+export function convertMessagesToConversationHistory(messages: Message[]): Array<{ role: 'user' | 'assistant', content: string }> {
+  return messages.map(message => ({
+    role: message.role,
+    content: message.content,
+  }))
+}

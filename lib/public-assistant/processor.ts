@@ -35,6 +35,9 @@ export interface ProcessorResult {
   };
 }
 
+
+const MODEL = process.env.NEXT_PUBLIC_OPENAI_MODEL || 'gpt-5-mini-2025-08-07';
+
 /**
  * Process messages with autonomous file search loop using Responses API
  */
@@ -85,7 +88,7 @@ export async function processEmployeeResponse(
 
     // Call OpenAI Responses API with file_search and function tools
     const response = await openai.responses.create({
-      model: 'gpt-4o',
+      model: MODEL,
       input: conversationHistory,
       instructions: systemPrompt,
       tools: [

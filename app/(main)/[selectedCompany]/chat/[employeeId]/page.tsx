@@ -13,8 +13,10 @@ import useConversationStore from '@/stores/chat/useConversationStore'
 import useChatListStore, { Chat } from '@/stores/chat/useChatListStore'
 import { convertMessagesToItems } from '@/lib/chat/message-converter'
 import { Message } from '@/lib/services/message-service'
+import type { Item } from '@/lib/chat/assistant'
 
 import { employees, type Employee } from '@/lib/services/employee-helpers'
+import type { ToolCallItem } from '@/lib/chat/assistant'
 
 export default function ChatPage() {
   const params = useParams()
@@ -180,9 +182,21 @@ export default function ChatPage() {
         status: i.type === 'tool_call' ? i.status : undefined,
         hasOutput: i.type === 'tool_call' ? !!i.output : undefined
       })), null, 2))
+      
+      // Convert messages to conversation history format for API calls
+      const { convertMessagesToConversationHistory } = await import('@/lib/chat/message-converter')
+      const conversationHistory = convertMessagesToConversationHistory(messages)
+      console.log('💬 Conversation history items:', conversationHistory.length)
+      console.log('📋 Conversation history:', JSON.stringify(conversationHistory.map(h => ({
+        role: h.role,
+        contentLength: h.content.length
+      })), null, 2))
       console.log('🏁 === LOADING COMPLETE ===')
       
+      // Update both UI items and conversation history
+      const { setConversationItems } = useConversationStore.getState()
       setChatMessages(items)
+      setConversationItems(conversationHistory)
     } catch (error) {
       console.error('Error loading messages:', error)
       resetConversation()
@@ -383,7 +397,7 @@ export default function ChatPage() {
       }
     }
 
-    const { addConversationItem, addChatMessage, setAssistantLoading, conversationItems, setChatMessages } = useConversationStore.getState()
+    const { addConversationItem, addChatMessage, setAssistantLoading, setChatMessages } = useConversationStore.getState()
 
     console.log('🚀 === SEND MESSAGE START ===')
 
@@ -404,6 +418,14 @@ export default function ChatPage() {
       addConversationItem(userMessage)
       addChatMessage(userItem)
 
+      const updatedConversationItems = useConversationStore.getState().conversationItems
+
+      console.log('📊 Current conversation items before send:', updatedConversationItems.length)
+      console.log('📋 Conversation items:', JSON.stringify(updatedConversationItems.map((item: any) => ({
+        role: item.role,
+        contentLength: item.content?.length || 0
+      })), null, 2))
+
       // Get auth token
       const token = await auth.currentUser?.getIdToken()
       if (!token) {
@@ -411,12 +433,18 @@ export default function ChatPage() {
       }
 
       // Build conversation history for context
-      const conversationHistory = conversationItems.map((item: any) => ({
+      const conversationHistory = updatedConversationItems.map((item: any) => ({
         role: item.role,
         content: typeof item.content === 'string' ? item.content : item.content[0]?.text || '',
       }))
 
-      console.log('🤖 Calling server-side processor...')
+      console.log('🤖 === SENDING MESSAGE THREAD TO AI ===')
+      console.log('📊 Total messages in thread:', conversationHistory.length)
+      console.log('📋 Full conversation thread:')
+      conversationHistory.forEach((msg, index) => {
+        console.log(`  [${index + 1}] ${msg.role.toUpperCase()}: ${msg.content.substring(0, 100)}${msg.content.length > 100 ? '...' : ''}`)
+      })
+      console.log('🚀 Calling server-side processor...')
 
       // Call the new server-side API that handles everything
       const response = await fetch(`/api/chat/${currentActiveChat.id}/respond`, {
@@ -436,6 +464,127 @@ export default function ChatPage() {
 
       if (!response.ok) {
         throw new Error('Failed to process message')
+      }
+
+      // Helpers for streaming assistant message into the UI
+      let streamingMessageId: string | null = null
+      let streamingAssistantText = ''
+
+      const ensureStreamingMessage = () => {
+        if (streamingMessageId) return
+        streamingMessageId = `stream-${Date.now()}`
+        addChatMessage({
+          type: 'message',
+          role: 'assistant',
+          id: streamingMessageId,
+          content: [
+            {
+              type: 'output_text',
+              text: '',
+            },
+          ],
+        })
+      }
+
+      const updateStreamingMessage = (text: string) => {
+        if (!streamingMessageId) return
+        const { chatMessages } = useConversationStore.getState()
+        const updated = chatMessages.map((item: Item) => {
+          if (item.id === streamingMessageId && item.type === 'message') {
+            const existingContent = item.content?.[0]
+            const contentItem =
+              existingContent && existingContent.type === 'output_text'
+                ? existingContent
+                : { type: 'output_text', text: '' }
+            return {
+              ...item,
+              content: [
+                {
+                  ...contentItem,
+                  type: 'output_text',
+                  text,
+                },
+              ],
+            }
+          }
+          return item
+        })
+        setChatMessages(updated)
+      }
+
+      const handleToolCallStart = (data: any) => {
+        if (!data?.id) return
+        const store = useConversationStore.getState()
+        const { chatMessages, addChatMessage } = store
+        const setMessages = store.setChatMessages
+        const toolType =
+          (data.toolType as ToolCallItem['tool_type']) ||
+          (data.name === 'file_search'
+            ? 'file_search_call'
+            : data.name === 'web_search'
+              ? 'web_search_call'
+              : 'function_call')
+
+        const existing = chatMessages.find(item => item.type === 'tool_call' && item.id === data.id) as ToolCallItem | undefined
+        if (existing) {
+          const updated = chatMessages.map(item => {
+            if (item.type === 'tool_call' && item.id === data.id) {
+              return {
+                ...item,
+                status: 'in_progress',
+                name: data.name ?? item.name,
+                arguments:
+                  typeof data.arguments === 'string'
+                    ? data.arguments
+                    : data.arguments
+                      ? JSON.stringify(data.arguments)
+                      : item.arguments,
+              }
+            }
+            return item
+          })
+          setMessages(updated)
+          return
+        }
+
+        const serializedArgs =
+          typeof data.arguments === 'string'
+            ? data.arguments
+            : data.arguments
+              ? JSON.stringify(data.arguments)
+              : undefined
+
+        addChatMessage({
+          type: 'tool_call',
+          tool_type: toolType,
+          status: 'in_progress',
+          id: data.id,
+          name: data.name ?? null,
+          arguments: serializedArgs,
+          output: null,
+        })
+      }
+
+      const handleToolCallComplete = (data: any) => {
+        if (!data?.id) return
+        const store = useConversationStore.getState()
+        const { chatMessages } = store
+        const setMessages = store.setChatMessages
+        let changed = false
+        const updated = chatMessages.map(item => {
+          if (item.type === 'tool_call' && item.id === data.id) {
+            changed = true
+            return {
+              ...item,
+              status: 'completed',
+              output: data.result ? JSON.stringify(data.result) : item.output,
+            }
+          }
+          return item
+        })
+        if (changed) {
+          setMessages(updated)
+        }
       }
 
       // Stream the response
@@ -459,16 +608,25 @@ export default function ChatPage() {
               
               switch (event.type) {
                 case 'message_delta':
-                  // Update UI with streaming text (optional - for now just log)
-                  console.log('📝 Message delta:', event.data.text?.substring(0, 50))
+                  {
+                    const deltaText = event.data?.delta || event.data?.textDelta || ''
+                    const cumulativeText = event.data?.text || (streamingAssistantText + deltaText)
+                    if (cumulativeText) {
+                      ensureStreamingMessage()
+                      streamingAssistantText = cumulativeText
+                      updateStreamingMessage(streamingAssistantText)
+                    }
+                  }
                   break
                 
                 case 'tool_call_start':
                   console.log('🔧 Tool call started:', event.data.name)
+                  handleToolCallStart(event.data)
                   break
                 
                 case 'tool_call_complete':
                   console.log('✅ Tool call completed:', event.data.name)
+                  handleToolCallComplete(event.data)
                   break
                 
                 case 'assistant_message_saved':
@@ -504,10 +662,15 @@ export default function ChatPage() {
 
       if (messagesResponse.ok) {
         const data = await messagesResponse.json()
-        const { convertMessagesToItems } = await import('@/lib/chat/message-converter')
+        const { convertMessagesToItems, convertMessagesToConversationHistory } = await import('@/lib/chat/message-converter')
         const items = convertMessagesToItems(data.messages)
+        const conversationHistory = convertMessagesToConversationHistory(data.messages)
+        
+        // Update both UI items and conversation history
+        const { setConversationItems } = useConversationStore.getState()
         setChatMessages(items)
-        console.log('✅ Messages reloaded from database')
+        setConversationItems(conversationHistory)
+        console.log('✅ Messages reloaded from database - UI items:', items.length, 'Conversation items:', conversationHistory.length)
       }
 
       setAssistantLoading(false)

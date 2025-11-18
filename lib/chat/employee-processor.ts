@@ -36,6 +36,8 @@ export interface EmployeeProcessorResult {
   error?: string;
 }
 
+const MODEL = process.env.NEXT_PUBLIC_OPENAI_MODEL || 'gpt-5-mini-2025-08-07';
+
 /**
  * Process employee chat with autonomous loop and save messages to database
  * This runs entirely server-side and handles all message persistence
@@ -83,6 +85,37 @@ export async function processEmployeeChat(
     // Initialize OpenAI
     const openai = new OpenAI();
 
+    const sanitizeConversationItem = (item: any): any => {
+      if (item === null || item === undefined) {
+        return item;
+      }
+
+      if (Array.isArray(item)) {
+        return item.map(sanitizeConversationItem);
+      }
+
+      if (typeof item !== 'object') {
+        return item;
+      }
+
+      const disallowedKeys = new Set([
+        'parsedArguments',
+        'parsed_arguments',
+        'toolCalls',
+      ]);
+
+      const sanitized: Record<string, any> = {};
+
+      for (const [key, value] of Object.entries(item)) {
+        if (disallowedKeys.has(key)) {
+          continue;
+        }
+        sanitized[key] = sanitizeConversationItem(value);
+      }
+
+      return sanitized;
+    };
+
     // Convert messages to Responses API format
     const conversationHistory: any[] = messages.map(msg => {
       if (msg.role === 'user') {
@@ -105,15 +138,67 @@ export async function processEmployeeChat(
     for (let iteration = 0; iteration < maxIterations; iteration++) {
       console.log(`[EMPLOYEE PROCESSOR] Iteration ${iteration + 1}/${maxIterations}`);
 
-      // Call OpenAI Responses API
-      const response = await openai.responses.create({
-        model: 'gpt-4o',
-        input: conversationHistory,
+      const sanitizedConversationHistory = conversationHistory.map(sanitizeConversationItem);
+
+      // Call OpenAI Responses API with streaming enabled
+      const stream: any = await openai.responses.stream({
+        model: MODEL,
+        input: sanitizedConversationHistory,
         instructions: systemPrompt,
         tools,
       });
 
-      // Process output items
+      let streamedAssistantText = '';
+      const streamingToolCalls = new Set<string>();
+
+      try {
+        for await (const event of stream as any) {
+          if (event.type === 'response.output_text.delta') {
+            const deltaText = event.delta || '';
+            streamedAssistantText += deltaText;
+
+            if (onStream && deltaText) {
+              onStream({
+                type: 'message_delta',
+                data: { delta: deltaText, text: streamedAssistantText },
+              });
+            }
+          } else if (event.type === 'response.output_item.added') {
+            const streamedItem = event.item;
+            if (!streamedItem) {
+              continue;
+            }
+
+            if (
+              streamedItem.type === 'function_call' ||
+              streamedItem.type === 'file_search_call' ||
+              streamedItem.type === 'web_search_call'
+            ) {
+              streamingToolCalls.add(streamedItem.id);
+              if (onStream) {
+                onStream({
+                  type: 'tool_call_start',
+                  data: {
+                    name: streamedItem.name || streamedItem.type,
+                    id: streamedItem.id,
+                    arguments: streamedItem.arguments,
+                    toolType: streamedItem.type,
+                  },
+                });
+              }
+            }
+          } else if (event.type === 'response.error') {
+            throw new Error(event.error?.message || 'OpenAI streaming error');
+          }
+        }
+      } catch (streamError) {
+        console.error('[EMPLOYEE PROCESSOR] Stream processing error:', streamError);
+        throw streamError;
+      }
+
+      const response = await stream.finalResponse();
+
+      // Process output items from final response
       let hasToolCalls = false;
       let assistantMessage = '';
 
@@ -122,13 +207,14 @@ export async function processEmployeeChat(
           // Extract text content
           const textContent = item.content?.find((c: any) => c.type === 'output_text');
           if (textContent && 'text' in textContent && textContent.text) {
-            assistantMessage = textContent.text;
-            
-            // Stream the message delta
-            if (onStream) {
+            const finalText = streamedAssistantText || textContent.text;
+            assistantMessage = finalText;
+
+            // Fallback streaming event if no deltas were sent
+            if (!streamedAssistantText && onStream) {
               onStream({
                 type: 'message_delta',
-                data: { text: textContent.text },
+                data: { text: finalText },
               });
             }
           }
@@ -147,33 +233,36 @@ export async function processEmployeeChat(
             status: 'completed',
           });
 
-          // Stream tool call start
-          if (onStream) {
+          // Stream tool call start (fallback if streaming event wasn't received)
+          if (onStream && !streamingToolCalls.has(item.id)) {
+            streamingToolCalls.add(item.id);
             onStream({
               type: 'tool_call_start',
-              data: { name: 'file_search', id: item.id },
+              data: { name: 'file_search', id: item.id, toolType: 'file_search_call' },
             });
           }
 
           // Add to conversation history
-          conversationHistory.push(item);
+          conversationHistory.push(sanitizeConversationItem(item));
 
           // Stream tool call complete
-          if (onStream) {
+          if (onStream && streamingToolCalls.has(item.id)) {
             onStream({
               type: 'tool_call_complete',
-              data: { name: 'file_search', id: item.id },
+              data: { name: 'file_search', id: item.id, toolType: 'file_search_call' },
             });
+            streamingToolCalls.delete(item.id);
           }
         } else if (item.type === 'function_call') {
           hasToolCalls = true;
           console.log(`[EMPLOYEE PROCESSOR] Function call: ${item.name}`);
 
-          // Stream tool call start
-          if (onStream) {
+          // Stream tool call start (fallback if streaming event wasn't received)
+          if (onStream && !streamingToolCalls.has(item.id)) {
+            streamingToolCalls.add(item.id);
             onStream({
               type: 'tool_call_start',
-              data: { name: item.name, id: item.id, arguments: item.arguments },
+              data: { name: item.name, id: item.id, arguments: item.arguments, toolType: 'function_call' },
             });
           }
 
@@ -219,19 +308,20 @@ export async function processEmployeeChat(
             });
 
             // Add function call and result to conversation history
-            conversationHistory.push(item);
-            conversationHistory.push({
+            conversationHistory.push(sanitizeConversationItem(item));
+            conversationHistory.push(sanitizeConversationItem({
               type: 'function_call_output',
               call_id: item.call_id,
               output: JSON.stringify(result),
-            });
+            }));
 
             // Stream tool call complete
-            if (onStream) {
+            if (onStream && streamingToolCalls.has(item.id)) {
               onStream({
                 type: 'tool_call_complete',
-                data: { name: item.name, id: item.id, result },
+                data: { name: item.name, id: item.id, result, toolType: 'function_call' },
               });
+              streamingToolCalls.delete(item.id);
             }
           } finally {
             // Restore original fetch
@@ -255,21 +345,25 @@ export async function processEmployeeChat(
           });
 
           // Stream tool call
-          if (onStream) {
+          if (onStream && !streamingToolCalls.has(item.id)) {
+            streamingToolCalls.add(item.id);
             onStream({
               type: 'tool_call_start',
-              data: { name: 'web_search', id: item.id },
+              data: { name: 'web_search', id: item.id, toolType: 'web_search_call' },
             });
           }
 
-          conversationHistory.push(item);
+          conversationHistory.push(sanitizeConversationItem(item));
 
-          if (onStream) {
+          if (onStream && streamingToolCalls.has(item.id)) {
             onStream({
               type: 'tool_call_complete',
-              data: { name: 'web_search', id: item.id },
+              data: { name: 'web_search', id: item.id, toolType: 'web_search_call' },
             });
+            streamingToolCalls.delete(item.id);
           }
+        } else if (item.type === 'reasoning') {
+          conversationHistory.push(sanitizeConversationItem(item));
         }
       }
 

@@ -65,6 +65,12 @@ export async function POST(
     }
 
     console.log(`[CHAT RESPOND] Processing message for chatId: ${chatId}, employeeId: ${employeeId}`);
+    console.log(`[CHAT RESPOND] === RECEIVED CONVERSATION HISTORY ===`);
+    console.log(`[CHAT RESPOND] Total messages in history: ${conversationHistory.length}`);
+    conversationHistory.forEach((msg: any, index: number) => {
+      console.log(`[CHAT RESPOND]   [${index + 1}] ${msg.role.toUpperCase()}: ${msg.content.substring(0, 100)}${msg.content.length > 100 ? '...' : ''}`);
+    });
+    console.log(`[CHAT RESPOND] New user message: ${message.substring(0, 100)}${message.length > 100 ? '...' : ''}`);
 
     // Save user message to database
     try {
@@ -87,6 +93,12 @@ export async function POST(
       ...conversationHistory,
       { role: 'user', content: message },
     ];
+
+    console.log(`[CHAT RESPOND] === FINAL MESSAGE THREAD FOR AI ===`);
+    console.log(`[CHAT RESPOND] Total messages being sent to AI: ${messages.length}`);
+    messages.forEach((msg, index) => {
+      console.log(`[CHAT RESPOND]   [${index + 1}] ${msg.role.toUpperCase()}: ${msg.content.substring(0, 100)}${msg.content.length > 100 ? '...' : ''}`);
+    });
 
     // Create a ReadableStream for SSE
     const stream = new ReadableStream({
