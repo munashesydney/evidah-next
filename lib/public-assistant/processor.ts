@@ -161,22 +161,21 @@ export async function processEmployeeResponse(
       }
     }
 
-    // If no tool calls were made, we have the final response
-    if (!hasToolCalls && finalResponse) {
+    // If we got a message, the AI is done responding (tool calls in this iteration are already incorporated)
+    if (finalResponse) {
       console.log(`[PROCESSOR] Final response received after ${iteration + 1} iteration(s)`);
       break;
     }
 
-    // If we had tool calls, continue the loop to get AI's response
+    // If we had tool calls but no message, continue the loop to get the AI's response
     if (hasToolCalls) {
+      console.log(`[PROCESSOR] Tool calls executed without message, continuing to next iteration`);
       continue;
     }
 
-    // Safety: if we get here without a response or tool calls, break
-    if (!finalResponse) {
-      console.warn(`[PROCESSOR] No response or tool calls in iteration ${iteration + 1}`);
-      break;
-    }
+    // If we get here with no message and no tool calls, something went wrong
+    console.warn(`[PROCESSOR] No response or tool calls in iteration ${iteration + 1}`);
+    break;
   }
 
   if (!finalResponse) {

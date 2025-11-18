@@ -312,16 +312,21 @@ export async function processEmployeeChat(
           console.error(`[EMPLOYEE PROCESSOR] ❌ Failed to save message:`, error);
           throw error;
         }
-      }
 
-      // If no tool calls were made, we're done
-      if (!hasToolCalls) {
-        console.log(`[EMPLOYEE PROCESSOR] No more tool calls, processing complete`);
+        // If we got a message, the AI is done responding (tool calls in this iteration are already incorporated)
+        console.log(`[EMPLOYEE PROCESSOR] Message received, processing complete`);
         break;
       }
 
-      // Continue loop for next iteration
-      console.log(`[EMPLOYEE PROCESSOR] Tool calls executed, continuing to next iteration`);
+      // If we had tool calls but no message, continue the loop to get the AI's response
+      if (hasToolCalls) {
+        console.log(`[EMPLOYEE PROCESSOR] Tool calls executed without message, continuing to next iteration`);
+        continue;
+      }
+
+      // If we get here with no message and no tool calls, we're done
+      console.log(`[EMPLOYEE PROCESSOR] No message or tool calls, processing complete`);
+      break;
     }
 
     console.log(`[EMPLOYEE PROCESSOR] ✅ Complete - saved ${messagesSaved} messages`);
