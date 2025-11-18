@@ -176,6 +176,50 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
             </ul>
           </div>
 
+          {/* Actions */}
+          <div>
+            <h3 className="text-xs uppercase text-gray-400 dark:text-gray-500 font-semibold pl-3">
+              <span className="hidden lg:block lg:sidebar-expanded:hidden 2xl:hidden text-center w-6" aria-hidden="true">
+                •••
+              </span>
+              <span className="lg:hidden lg:sidebar-expanded:block 2xl:block">Automation</span>
+            </h3>
+            <ul className="mt-3">
+              <li
+                className={`pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0 bg-linear-to-r ${
+                  pathname?.includes('/actions') &&
+                  'from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04]'
+                }`}
+              >
+                <Link
+                  href={`/${selectedCompany}/actions`}
+                  className="block text-gray-800 dark:text-gray-100 truncate transition duration-150 hover:text-gray-900 dark:hover:text-white"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <svg
+                        className={`shrink-0 fill-current ${
+                          pathname?.includes('/actions')
+                            ? 'text-violet-500'
+                            : 'text-gray-400 dark:text-gray-500'
+                        }`}
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 16 16"
+                      >
+                        <path d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                        Actions
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              </li>
+            </ul>
+          </div>
+
           {/* Knowledge Base - Dropdown */}
           <div>
             <h3 className="text-xs uppercase text-gray-400 dark:text-gray-500 font-semibold pl-3">
