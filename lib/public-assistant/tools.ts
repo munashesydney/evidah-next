@@ -49,17 +49,15 @@ export async function executePublicAssistantTool(
 
 /**
  * Handle escalation to human agent
- * For now, this just returns true to indicate the escalation was logged
- * In the future, this could:
- * - Create a ticket in the support system
- * - Notify available human agents
- * - Update the chat session status
- * - Send alerts based on urgency
+ * Creates a question chat with Sung Wen and notifies the user via email
  */
 async function handleEscalateToHuman(args: Record<string, any>): Promise<{ success: boolean; message: string; data: any }> {
   const reason = args.reason as string;
   const urgency = (args.urgency as "low" | "medium" | "high") || "medium";
   const summary = args.summary as string | undefined;
+  const uid = args.uid as string;
+  const companyId = args.companyId as string;
+  const conversationContext = args.conversationContext as string | undefined;
 
   console.log("[ESCALATION] Customer conversation escalated to human agent", {
     reason,
@@ -68,21 +66,108 @@ async function handleEscalateToHuman(args: Record<string, any>): Promise<{ succe
     timestamp: new Date().toISOString(),
   });
 
-  // TODO: Implement actual escalation logic:
-  // - Create support ticket
-  // - Notify available agents
-  // - Update chat session status
-  // - Send alerts for high urgency
+  if (!uid || !companyId) {
+    console.error("[ESCALATION] Missing uid or companyId");
+    return {
+      success: false,
+      message: "Unable to escalate: missing user or company information",
+      data: { escalated: false },
+    };
+  }
 
-  return {
-    success: true,
-    message: "Escalation logged successfully. A human agent will be notified.",
-    data: {
-      escalated: true,
-      reason,
-      urgency,
-      summary,
-      timestamp: new Date().toISOString(),
-    },
-  };
+  try {
+    // Import services directly for server-side execution
+    const { ChatService } = await import('@/lib/services/chat-service');
+    const { MessageService } = await import('@/lib/services/message-service');
+
+    // Create a question chat with Sung Wen
+    const chat = await ChatService.createChat(uid, companyId, {
+      employeeId: 'sung-wen',
+      title: `Question: ${reason.substring(0, 50)}...`,
+      metadata: {
+        type: 'question',
+        escalation: true,
+        reason,
+        urgency,
+        summary,
+        createdAt: new Date().toISOString(),
+      },
+    });
+
+    const chatId = chat.id;
+
+    // Add initial message to the chat describing the question
+    // This comes from the assistant side since it's the AI asking the question
+    const questionMessage = `I need your help with a customer question. I'm not 100% certain about the answer and want to make sure I provide accurate information.
+
+**Reason for Escalation:** ${reason}
+
+**Urgency:** ${urgency.toUpperCase()}
+
+${summary ? `**Summary:** ${summary}\n\n` : ''}${conversationContext ? `**Conversation Context:**\n${conversationContext}\n\n` : ''}Could you please provide guidance on how I should respond to this?`;
+
+    await MessageService.createMessage(uid, companyId, chatId, {
+      content: questionMessage,
+      role: 'assistant',
+    });
+
+    // Send email notification using fetch
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+                   process.env.NEXT_PUBLIC_APP_URL || 
+                   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    
+    console.log(`[ESCALATION] Sending email notification to ${baseUrl}/api/notify/question`);
+    
+    try {
+      const emailResponse = await fetch(`${baseUrl}/api/notify/question`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          uid,
+          companyId,
+          chatId,
+          reason,
+          urgency,
+          summary,
+        }),
+      });
+
+      if (!emailResponse.ok) {
+        const errorData = await emailResponse.json();
+        console.error("[ESCALATION] Email notification failed:", errorData);
+      } else {
+        console.log("[ESCALATION] Email notification sent successfully");
+      }
+    } catch (emailError) {
+      console.error("[ESCALATION] Failed to send email notification:", emailError);
+      // Don't fail the escalation if email fails
+    }
+
+    console.log(`[ESCALATION] Question chat created: ${chatId}`);
+
+    return {
+      success: true,
+      message: "Question escalated successfully. Sung Wen has been notified and will review your question.",
+      data: {
+        escalated: true,
+        chatId,
+        reason,
+        urgency,
+        summary,
+        timestamp: new Date().toISOString(),
+      },
+    };
+  } catch (error) {
+    console.error("[ESCALATION] Error creating question:", error);
+    return {
+      success: false,
+      message: "Failed to escalate question. Please try again.",
+      data: {
+        escalated: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
+    };
+  }
 }

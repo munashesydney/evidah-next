@@ -149,7 +149,14 @@ export async function processEmployeeResponse(
           ? JSON.parse(item.arguments) 
           : item.arguments;
         
-        const result = await executePublicAssistantTool(item.name, args);
+        // Inject uid and companyId for internal tool calls
+        const argsWithContext = {
+          ...args,
+          uid,
+          companyId,
+        };
+        
+        const result = await executePublicAssistantTool(item.name, argsWithContext);
         
         // Add function call and result to conversation history
         conversationHistory.push(item);

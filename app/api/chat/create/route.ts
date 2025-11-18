@@ -22,16 +22,21 @@ import {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Authenticate user
-    const authResult = await requireAuth(request);
-    if (authResult instanceof Response) {
-      return authResult; // Return 401 error
-    }
-    const { userId } = authResult;
-
-    // Parse request body
+    // Parse request body first to check for uid
     const body = await request.json();
-    const { employeeId, companyId, title, threadId, metadata } = body;
+    const { uid, employeeId, companyId, title, threadId, metadata } = body;
+
+    // If uid is provided (internal call), use it; otherwise authenticate
+    let userId: string;
+    if (uid) {
+      userId = uid;
+    } else {
+      const authResult = await requireAuth(request);
+      if (authResult instanceof Response) {
+        return authResult; // Return 401 error
+      }
+      userId = authResult.userId;
+    }
 
     // Validate required fields
     if (!employeeId) {

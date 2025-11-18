@@ -8,55 +8,43 @@ import {
 
 /**
  * GET /api/chat/list
- * List chat sessions with pagination and filtering
+ * List chats with optional filtering
  * 
  * Query parameters:
- * - companyId: string (required) - The company/knowledge base ID
- * - employeeId: string (optional) - Filter by AI assistant/employee ID
- * - page: number (optional, default: 1) - Page number
- * - limit: number (optional, default: 20) - Items per page
+ * - uid: string (optional) - User ID (for internal calls)
+ * - companyId: string (required) - Company/knowledge base ID
+ * - employeeId: string (optional) - Filter by employee ID
+ * - page: number (optional) - Page number (default: 1)
+ * - limit: number (optional) - Items per page (default: 20)
  * 
  * Headers:
- * - Authorization: Bearer <firebase-token>
+ * - Authorization: Bearer <firebase-token> (if uid not provided)
  */
 export async function GET(request: NextRequest) {
   try {
-    // Authenticate user
-    const authResult = await requireAuth(request);
-    if (authResult instanceof Response) {
-      return authResult; // Return 401 error
-    }
-    const { userId } = authResult;
-
-    // Parse query parameters
     const { searchParams } = new URL(request.url);
+    const uid = searchParams.get('uid');
     const companyId = searchParams.get('companyId');
     const employeeId = searchParams.get('employeeId') || undefined;
-    const page = parseInt(searchParams.get('page') || '1', 10);
-    const limit = parseInt(searchParams.get('limit') || '20', 10);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '20');
 
-    // Validate required fields
+    // If uid is provided (internal call), use it; otherwise authenticate
+    let userId: string;
+    if (uid) {
+      userId = uid;
+    } else {
+      const authResult = await requireAuth(request);
+      if (authResult instanceof Response) {
+        return authResult; // Return 401 error
+      }
+      userId = authResult.userId;
+    }
+
     if (!companyId) {
       return createErrorResponse(
         'INVALID_REQUEST',
         'Missing required parameter: companyId',
-        400
-      );
-    }
-
-    // Validate pagination parameters
-    if (page < 1) {
-      return createErrorResponse(
-        'INVALID_REQUEST',
-        'Page number must be greater than 0',
-        400
-      );
-    }
-
-    if (limit < 1 || limit > 100) {
-      return createErrorResponse(
-        'INVALID_REQUEST',
-        'Limit must be between 1 and 100',
         400
       );
     }
@@ -70,10 +58,7 @@ export async function GET(request: NextRequest) {
       limit
     );
 
-    return createSuccessResponse({
-      chats: result.chats,
-      pagination: result.pagination,
-    });
+    return createSuccessResponse(result);
   } catch (error: any) {
     console.error('Error listing chats:', error);
     return createErrorResponse(

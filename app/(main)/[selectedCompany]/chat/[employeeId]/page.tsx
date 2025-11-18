@@ -99,7 +99,18 @@ export default function ChatPage() {
         const data = await response.json()
         setChats(data.chats || [])
         
-        // Don't auto-select any chat - let user choose
+        // Check if there's a chatId in the URL query params
+        const urlParams = new URLSearchParams(window.location.search)
+        const chatIdFromUrl = urlParams.get('chatId')
+        
+        if (chatIdFromUrl) {
+          // Find the chat in the loaded chats
+          const chatToLoad = data.chats.find((c: Chat) => c.id === chatIdFromUrl)
+          if (chatToLoad) {
+            // Load this chat automatically
+            await loadChatMessages(chatToLoad)
+          }
+        }
       } catch (error) {
         console.error('Error loading chats:', error)
       } finally {

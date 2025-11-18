@@ -25,18 +25,23 @@ export async function POST(
   { params }: { params: Promise<{ chatId: string }> }
 ) {
   try {
-    // Authenticate user
-    const authResult = await requireAuth(request);
-    if (authResult instanceof Response) {
-      return authResult; // Return 401 error
-    }
-    const { userId } = authResult;
-
     const { chatId } = await params;
 
-    // Parse request body
+    // Parse request body first to check for uid
     const body = await request.json();
-    const { content, role, companyId, toolCalls, metadata } = body;
+    const { uid, content, role, companyId, toolCalls, metadata } = body;
+
+    // If uid is provided (internal call), use it; otherwise authenticate
+    let userId: string;
+    if (uid) {
+      userId = uid;
+    } else {
+      const authResult = await requireAuth(request);
+      if (authResult instanceof Response) {
+        return authResult; // Return 401 error
+      }
+      userId = authResult.userId;
+    }
 
     // Validate required fields
     if (!content) {

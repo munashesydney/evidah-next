@@ -28,7 +28,7 @@
 
   // API endpoints - use app.evidah.com for production
   const PRODUCTION_BASE = 'https://app.evidah.com';
-  const DEV_BASE = 'http://localhost:3000';
+  const DEV_BASE = 'http://localhost:3002';
   const BASE_URL = isLocalhost ? DEV_BASE : PRODUCTION_BASE;
   
   const API_BASE = BASE_URL + '/api/employee/respond';
