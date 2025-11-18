@@ -111,6 +111,47 @@ export class MessageService {
   }
 
   /**
+   * Create a new message in an action event
+   */
+  static async createActionEventMessage(
+    userId: string,
+    companyId: string,
+    actionId: string,
+    eventId: string,
+    data: CreateMessageData
+  ): Promise<Message> {
+    const now = Timestamp.now();
+    
+    const messageData = {
+      role: data.role,
+      content: data.content,
+      timestamp: now,
+      createdAt: now.toDate().toISOString(),
+      ...(data.toolCalls && data.toolCalls.length > 0 && { toolCalls: data.toolCalls }),
+      metadata: data.metadata || {},
+    };
+
+    const messageRef = db
+      .collection('Users')
+      .doc(userId)
+      .collection('knowledgebases')
+      .doc(companyId)
+      .collection('actions')
+      .doc(actionId)
+      .collection('events')
+      .doc(eventId)
+      .collection('messages')
+      .doc();
+
+    await messageRef.set(messageData);
+
+    return {
+      id: messageRef.id,
+      ...messageData,
+    } as Message;
+  }
+
+  /**
    * List messages in a chat with pagination
    */
   static async listMessages(

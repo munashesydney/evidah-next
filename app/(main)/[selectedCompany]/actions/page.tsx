@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import Image from 'next/image';
+import ActionEventViewer from '@/components/actions/action-event-viewer';
 
 interface Action {
   id: string;
@@ -45,6 +46,9 @@ export default function ActionsPage() {
   const [selectedTrigger, setSelectedTrigger] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState('');
   const [prompt, setPrompt] = useState('');
+
+  // Event viewer state
+  const [viewingAction, setViewingAction] = useState<Action | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -220,7 +224,8 @@ export default function ActionsPage() {
             return (
               <div
                 key={action.id}
-                className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-shadow"
+                className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-all cursor-pointer"
+                onClick={() => setViewingAction(action)}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-4 flex-1">
@@ -251,13 +256,19 @@ export default function ActionsPage() {
                       <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
                         {action.prompt}
                       </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                        Click to view event history
+                      </p>
                     </div>
                   </div>
 
                   {/* Actions */}
                   <div className="flex items-center space-x-2 ml-4">
                     <button
-                      onClick={() => handleToggle(action.id, action.enabled)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggle(action.id, action.enabled);
+                      }}
                       className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                         action.enabled ? 'bg-violet-600' : 'bg-gray-200 dark:bg-gray-700'
                       }`}
@@ -269,7 +280,10 @@ export default function ActionsPage() {
                       />
                     </button>
                     <button
-                      onClick={() => handleDelete(action.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(action.id);
+                      }}
                       className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                     >
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -288,6 +302,18 @@ export default function ActionsPage() {
           })
         )}
       </div>
+
+      {/* Event Viewer Modal */}
+      {viewingAction && uid && (
+        <ActionEventViewer
+          uid={uid}
+          selectedCompany={selectedCompany}
+          actionId={viewingAction.id}
+          actionName={getTriggerLabel(viewingAction.trigger)}
+          employeeId={viewingAction.employee}
+          onClose={() => setViewingAction(null)}
+        />
+      )}
 
       {/* Create Action Card */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 border-2 border-gray-200 dark:border-gray-700 shadow-lg">

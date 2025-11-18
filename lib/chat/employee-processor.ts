@@ -20,6 +20,9 @@ export interface EmployeeProcessorOptions {
   employeeId?: string;
   personalityLevel?: number;
   onStream?: (event: StreamEvent) => void;
+  // For action events
+  isActionEvent?: boolean;
+  actionId?: string;
 }
 
 export interface StreamEvent {
@@ -49,6 +52,8 @@ export async function processEmployeeChat(
     employeeId,
     personalityLevel = 2,
     onStream,
+    isActionEvent = false,
+    actionId,
   } = options;
 
   console.log(`[EMPLOYEE PROCESSOR] Starting - chatId: ${chatId}, employeeId: ${employeeId}`);
@@ -270,11 +275,20 @@ export async function processEmployeeChat(
         console.log(`[EMPLOYEE PROCESSOR] Tool calls:`, accumulatedToolCalls.map(tc => tc.name || tc.type));
 
         try {
-          await MessageService.createMessage(uid, companyId, chatId, {
-            content: assistantMessage,
-            role: 'assistant',
-            toolCalls: accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined,
-          });
+          // Save to action event or regular chat based on context
+          if (isActionEvent && actionId) {
+            await MessageService.createActionEventMessage(uid, companyId, actionId, chatId, {
+              content: assistantMessage,
+              role: 'assistant',
+              toolCalls: accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined,
+            });
+          } else {
+            await MessageService.createMessage(uid, companyId, chatId, {
+              content: assistantMessage,
+              role: 'assistant',
+              toolCalls: accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined,
+            });
+          }
 
           messagesSaved++;
           console.log(`[EMPLOYEE PROCESSOR] ✅ Message saved (${messagesSaved} total)`);
