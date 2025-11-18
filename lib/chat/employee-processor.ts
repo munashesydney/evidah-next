@@ -187,8 +187,12 @@ export async function processEmployeeChat(
           global.fetch = ((url: any, options?: any) => {
             if (typeof url === 'string' && url.startsWith('/')) {
               // Convert relative URL to absolute for server-side
-              const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+              // Use NEXT_PUBLIC_BASE_URL, NEXT_PUBLIC_APP_URL, VERCEL_URL, or fallback to localhost
+              const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+                             process.env.NEXT_PUBLIC_APP_URL || 
+                             (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
               url = `${baseUrl}${url}`;
+              console.log(`[EMPLOYEE PROCESSOR] Converted relative URL to: ${url}`);
             }
             return originalFetch(url, options);
           }) as typeof fetch;
