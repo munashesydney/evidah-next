@@ -204,6 +204,8 @@ export async function processEmployeeChat(
 
       // Process output items from final response
       let hasToolCalls = false;
+      let hasFileSearch = false;
+      let hasWebSearch = false;
       let assistantMessage = '';
 
       for (const item of response.output || []) {
@@ -223,10 +225,12 @@ export async function processEmployeeChat(
             }
           }
         } else if (item.type === 'file_search_call') {
-          hasToolCalls = true;
+          // Built-in tools like file_search are handled internally by OpenAI
+          // Do NOT push them into conversationHistory - they don't need to be replayed
+          hasFileSearch = true;
           console.log(`[EMPLOYEE PROCESSOR] File search executed`);
           
-          // Track tool call (accumulate across iterations)
+          // Track tool call (accumulate across iterations) for analytics only
           accumulatedToolCalls.push({
             id: item.id,
             type: 'file_search_call',
@@ -246,8 +250,7 @@ export async function processEmployeeChat(
             });
           }
 
-          // Add to conversation history
-          conversationHistory.push(sanitizeConversationItem(item));
+          // DO NOT add to conversationHistory - built-in tools are handled internally
 
           // Stream tool call complete
           if (onStream && streamingToolCalls.has(item.id)) {
@@ -334,10 +337,12 @@ export async function processEmployeeChat(
 
 
         } else if (item.type === 'web_search_call') {
-          hasToolCalls = true;
+          // Built-in tools like web_search are handled internally by OpenAI
+          // Do NOT push them into conversationHistory - they don't need to be replayed
+          hasWebSearch = true;
           console.log(`[EMPLOYEE PROCESSOR] Web search executed`);
 
-          // Track tool call (accumulate across iterations)
+          // Track tool call (accumulate across iterations) for analytics only
           accumulatedToolCalls.push({
             id: item.id,
             type: 'web_search_call',
@@ -357,7 +362,7 @@ export async function processEmployeeChat(
             });
           }
 
-          conversationHistory.push(sanitizeConversationItem(item));
+          // DO NOT add to conversationHistory - built-in tools are handled internally
 
           if (onStream && streamingToolCalls.has(item.id)) {
             onStream({
@@ -367,7 +372,9 @@ export async function processEmployeeChat(
             streamingToolCalls.delete(item.id);
           }
         } else if (item.type === 'reasoning') {
-          conversationHistory.push(sanitizeConversationItem(item));
+          // Reasoning items are part of built-in tool execution
+          // Do NOT feed them back into conversationHistory in stateless mode
+          // They're handled internally by OpenAI
         }
       }
 
@@ -416,9 +423,16 @@ export async function processEmployeeChat(
         break;
       }
 
-      // If we had tool calls but no message, continue the loop to get the AI's response
+      // If we had function calls, continue the loop to get the AI's response after executing them
       if (hasToolCalls) {
-        console.log(`[EMPLOYEE PROCESSOR] Tool calls executed without message, continuing to next iteration`);
+        console.log(`[EMPLOYEE PROCESSOR] Function calls executed without message, continuing to next iteration`);
+        continue;
+      }
+
+      // If we had built-in tool calls (file_search/web_search) but no message, continue once
+      // Built-in tools are handled internally, but may need another iteration to generate response
+      if (hasFileSearch || hasWebSearch) {
+        console.log(`[EMPLOYEE PROCESSOR] Built-in tool calls executed without message, continuing to next iteration`);
         continue;
       }
 

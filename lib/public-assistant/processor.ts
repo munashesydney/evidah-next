@@ -56,8 +56,8 @@ export async function processEmployeeResponse(
   // Get vector store for company's knowledge base
   const vectorStoreId = await getOrCreateVectorStore(uid, companyId);
 
-  // Build system prompt
-  const systemPrompt = getEmployeeSystemPrompt(employee, context);
+  // Build system prompt (includes rules if available)
+  const systemPrompt = await getEmployeeSystemPrompt(employee, context, uid, companyId);
 
   // Initialize OpenAI
   const openai = new OpenAI();
@@ -127,6 +127,7 @@ export async function processEmployeeResponse(
 
     // Process output items
     let hasToolCalls = false;
+    let hasFileSearch = false;
     
     for (const item of response.output || []) {
       if (item.type === 'message') {
@@ -136,12 +137,14 @@ export async function processEmployeeResponse(
           finalResponse = textContent.text;
         }
       } else if (item.type === 'file_search_call') {
-        hasToolCalls = true;
+        // Built-in tools like file_search are handled internally by OpenAI
+        // Do NOT push them into conversationHistory - they don't need to be replayed
+        hasFileSearch = true;
         searchIterations++;
         console.log(`[PROCESSOR] File search executed`);
         
-        // Add the tool call to conversation history
-        conversationHistory.push(item);
+        // Note: We don't set hasToolCalls here because built-in tools are handled internally
+        // but we track hasFileSearch to continue the loop if needed
       } else if (item.type === 'function_call') {
         hasToolCalls = true;
         console.log(`[PROCESSOR] Function call: ${item.name}`);
@@ -177,9 +180,16 @@ export async function processEmployeeResponse(
       break;
     }
 
-    // If we had tool calls but no message, continue the loop to get the AI's response
+    // If we had function calls, continue the loop to get the AI's response after executing them
     if (hasToolCalls) {
-      console.log(`[PROCESSOR] Tool calls executed without message, continuing to next iteration`);
+      console.log(`[PROCESSOR] Function calls executed without message, continuing to next iteration`);
+      continue;
+    }
+
+    // If we had file_search but no message, continue once to let OpenAI process the results
+    // Built-in tools are handled internally, but may need another iteration to generate response
+    if (hasFileSearch) {
+      console.log(`[PROCESSOR] File search executed without message, continuing to next iteration`);
       continue;
     }
 
