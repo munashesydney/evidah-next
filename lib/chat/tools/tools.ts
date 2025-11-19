@@ -124,6 +124,10 @@ export const getTools = async (
           'create_faq': ['question', 'answer'],
           'update_faq': ['faqId'], // At least one of question/answer/enabled should be provided, but we'll let the API handle validation
           'delete_faq': ['faqId'],
+          'get_scenarios': [], // All params optional (uid/selectedCompany injected)
+          'add_scenario': ['name', 'condition', 'thenAction'],
+          'update_scenario': ['scenarioId'], // At least one field should be provided, but we'll let the API handle validation
+          'delete_scenario': ['scenarioId'],
           'search_articles': ['query'], // query is required
           'search_categories': ['query'], // query is required
           'get_article': ['articleId'],

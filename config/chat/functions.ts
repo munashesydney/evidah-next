@@ -1262,6 +1262,151 @@ export const delete_faq = async ({
 };
 
 /**
+ * Get all scenarios
+ */
+export const get_scenarios = async ({
+  uid,
+  selectedCompany,
+  page,
+  limit,
+}: {
+  uid: string;
+  selectedCompany: string;
+  page?: number;
+  limit?: number;
+}) => {
+  const params = new URLSearchParams({
+    uid,
+    selectedCompany,
+  });
+  
+  if (page !== undefined) {
+    params.append('page', page.toString());
+  }
+  if (limit !== undefined) {
+    params.append('limit', limit.toString());
+  }
+
+  const res = await fetch(`/api/scenarios/list?${params.toString()}`).then((res) => res.json());
+
+  return res;
+};
+
+/**
+ * Add a scenario
+ */
+export const add_scenario = async ({
+  uid,
+  selectedCompany,
+  name,
+  description,
+  condition,
+  thenAction,
+  elseAction,
+  enabled,
+}: {
+  uid: string;
+  selectedCompany: string;
+  name: string;
+  description?: string;
+  condition: string;
+  thenAction: string;
+  elseAction?: string;
+  enabled?: boolean;
+}) => {
+  const res = await fetch(`/api/scenarios/add`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      uid,
+      selectedCompany,
+      name,
+      description,
+      condition,
+      thenAction,
+      elseAction,
+      enabled,
+    }),
+  }).then((res) => res.json());
+
+  return res;
+};
+
+/**
+ * Update a scenario
+ */
+export const update_scenario = async ({
+  uid,
+  selectedCompany,
+  scenarioId,
+  name,
+  description,
+  condition,
+  thenAction,
+  elseAction,
+  enabled,
+}: {
+  uid: string;
+  selectedCompany: string;
+  scenarioId: string;
+  name?: string;
+  description?: string;
+  condition?: string;
+  thenAction?: string;
+  elseAction?: string | null;
+  enabled?: boolean;
+}) => {
+  const res = await fetch(`/api/scenarios/update`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      uid,
+      selectedCompany,
+      scenarioId,
+      name,
+      description,
+      condition,
+      thenAction,
+      elseAction,
+      enabled,
+    }),
+  }).then((res) => res.json());
+
+  return res;
+};
+
+/**
+ * Delete a scenario
+ */
+export const delete_scenario = async ({
+  uid,
+  selectedCompany,
+  scenarioId,
+}: {
+  uid: string;
+  selectedCompany: string;
+  scenarioId: string;
+}) => {
+  const res = await fetch(`/api/scenarios/delete`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      uid,
+      selectedCompany,
+      scenarioId,
+    }),
+  }).then((res) => res.json());
+
+  return res;
+};
+
+/**
  * Get live visitors
  */
 export const get_live_visitors = async ({
@@ -1702,6 +1847,10 @@ export const functionsMap = {
   create_faq: create_faq,
   update_faq: update_faq,
   delete_faq: delete_faq,
+  get_scenarios: get_scenarios,
+  add_scenario: add_scenario,
+  update_scenario: update_scenario,
+  delete_scenario: delete_scenario,
   get_live_visitors: get_live_visitors,
   get_metrics_overview: get_metrics_overview,
   get_top_countries: get_top_countries,

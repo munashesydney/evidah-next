@@ -41,6 +41,7 @@ export default function ActionsPage() {
   const [actions, setActions] = useState<Action[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [updating, setUpdating] = useState(false);
 
   // Form state
   const [selectedTrigger, setSelectedTrigger] = useState('');
@@ -49,6 +50,9 @@ export default function ActionsPage() {
 
   // Event viewer state
   const [viewingAction, setViewingAction] = useState<Action | null>(null);
+  
+  // Edit state
+  const [editingAction, setEditingAction] = useState<Action | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -122,6 +126,61 @@ export default function ActionsPage() {
       alert('Failed to create action');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleEdit = (action: Action) => {
+    setEditingAction(action);
+    setSelectedTrigger(action.trigger);
+    setSelectedEmployee(action.employee);
+    setPrompt(action.prompt);
+    // Scroll to form
+    setTimeout(() => {
+      document.getElementById('action-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingAction(null);
+    setSelectedTrigger('');
+    setSelectedEmployee('');
+    setPrompt('');
+  };
+
+  const handleUpdate = async () => {
+    if (!uid || !editingAction || !selectedTrigger || !selectedEmployee || !prompt.trim()) {
+      alert('Please fill in all fields');
+      return;
+    }
+
+    try {
+      setUpdating(true);
+      const response = await fetch('/api/actions', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid,
+          selectedCompany,
+          actionId: editingAction.id,
+          trigger: selectedTrigger,
+          employee: selectedEmployee,
+          prompt: prompt.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setActions(actions.map((a) => (a.id === editingAction.id ? data.action : a)));
+        handleCancelEdit();
+      } else {
+        alert('Failed to update action');
+      }
+    } catch (error) {
+      console.error('Error updating action:', error);
+      alert('Failed to update action');
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -282,9 +341,27 @@ export default function ActionsPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
+                        handleEdit(action);
+                      }}
+                      className="p-2 text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+                      title="Edit action"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
                         handleDelete(action.id);
                       }}
                       className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                      title="Delete action"
                     >
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path
@@ -315,9 +392,21 @@ export default function ActionsPage() {
         />
       )}
 
-      {/* Create Action Card */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 border-2 border-gray-200 dark:border-gray-700 shadow-lg">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Create New Action</h3>
+      {/* Create/Edit Action Card */}
+      <div id="action-form" className="bg-white dark:bg-gray-800 rounded-2xl p-6 border-2 border-gray-200 dark:border-gray-700 shadow-lg">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            {editingAction ? 'Edit Action' : 'Create New Action'}
+          </h3>
+          {editingAction && (
+            <button
+              onClick={handleCancelEdit}
+              className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
 
         <div className="space-y-4">
           {/* Trigger Selection */}
@@ -386,14 +475,24 @@ export default function ActionsPage() {
             />
           </div>
 
-          {/* Create Button */}
-          <button
-            onClick={handleCreate}
-            disabled={creating || !selectedTrigger || !selectedEmployee || !prompt.trim()}
-            className="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-medium hover:from-violet-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
-          >
-            {creating ? 'Creating...' : 'Create Action'}
-          </button>
+          {/* Create/Update Button */}
+          {editingAction ? (
+            <button
+              onClick={handleUpdate}
+              disabled={updating || !selectedTrigger || !selectedEmployee || !prompt.trim()}
+              className="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-medium hover:from-violet-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
+            >
+              {updating ? 'Updating...' : 'Update Action'}
+            </button>
+          ) : (
+            <button
+              onClick={handleCreate}
+              disabled={creating || !selectedTrigger || !selectedEmployee || !prompt.trim()}
+              className="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-medium hover:from-violet-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
+            >
+              {creating ? 'Creating...' : 'Create Action'}
+            </button>
+          )}
         </div>
       </div>
     </div>

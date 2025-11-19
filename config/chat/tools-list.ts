@@ -730,6 +730,94 @@ const employeeSpecificTools = {
       },
     },
     {
+      name: "get_scenarios",
+      description: "Get all chat scenarios. Use this to view all existing scenarios that define conditional logic for automated responses.",
+      parameters: {
+        page: {
+          type: "number",
+          description: "Page number for pagination (optional, default is 1)",
+        },
+        limit: {
+          type: "number",
+          description: "Number of scenarios per page (optional, default is 20)",
+        },
+      },
+    },
+    {
+      name: "add_scenario",
+      description: "Create a new chat scenario. Use this to add conditional logic that automates responses based on user messages. Scenarios use natural language for conditions and actions.",
+      parameters: {
+        name: {
+          type: "string",
+          description: "The name of the scenario",
+        },
+        description: {
+          type: "string",
+          description: "A description of what this scenario does (optional)",
+        },
+        condition: {
+          type: "string",
+          description: "Natural language description of when this scenario should trigger (e.g., 'When the user message contains words like refund, return, or money back')",
+        },
+        thenAction: {
+          type: "string",
+          description: "Natural language description of what should happen when the condition is met (e.g., 'Respond with: I can help you with your refund request...')",
+        },
+        elseAction: {
+          type: "string",
+          description: "Natural language description of what should happen if the condition is not met (optional)",
+        },
+        enabled: {
+          type: "boolean",
+          description: "Whether the scenario should be enabled (optional, default is true)",
+        },
+      },
+    },
+    {
+      name: "update_scenario",
+      description: "Update an existing chat scenario. Use this to modify scenario name, description, condition, actions, or enable/disable it.",
+      parameters: {
+        scenarioId: {
+          type: "string",
+          description: "The ID of the scenario to update",
+        },
+        name: {
+          type: "string",
+          description: "New name for the scenario (optional)",
+        },
+        description: {
+          type: "string",
+          description: "New description for the scenario (optional)",
+        },
+        condition: {
+          type: "string",
+          description: "New condition in natural language (optional)",
+        },
+        thenAction: {
+          type: "string",
+          description: "New then action in natural language (optional)",
+        },
+        elseAction: {
+          type: "string",
+          description: "New else action in natural language, or null to remove (optional)",
+        },
+        enabled: {
+          type: "boolean",
+          description: "Whether the scenario should be enabled (optional)",
+        },
+      },
+    },
+    {
+      name: "delete_scenario",
+      description: "Delete a chat scenario. Use this to permanently remove a scenario.",
+      parameters: {
+        scenarioId: {
+          type: "string",
+          description: "The ID of the scenario to delete",
+        },
+      },
+    },
+    {
       name: "get_live_visitors",
       description: "Get currently active live visitors on the knowledge base. Use this to see who is currently browsing the site.",
       parameters: {},

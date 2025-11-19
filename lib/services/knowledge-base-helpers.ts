@@ -209,6 +209,28 @@ export async function generateArticlesTXTContent(
     });
   }
 
+  // Add Scenarios at the very end
+  const scenarios = await getAllScenarios(uid, selectedCompany);
+  if (scenarios.length > 0) {
+    txtContent += `\n\n`;
+    txtContent += `CHAT SCENARIOS:\n`;
+    txtContent += `===============\n\n`;
+    
+    scenarios.forEach((scenario, index) => {
+      txtContent += `Scenario ${index + 1}: ${scenario.name}\n`;
+      if (scenario.description) {
+        txtContent += `Description: ${scenario.description}\n`;
+      }
+      txtContent += `Condition: ${scenario.condition}\n`;
+      txtContent += `Then Action: ${scenario.thenAction}\n`;
+      if (scenario.elseAction && scenario.elseAction.trim()) {
+        txtContent += `Otherwise Action: ${scenario.elseAction}\n`;
+      }
+      txtContent += `Status: ${scenario.enabled ? 'Active' : 'Inactive'}\n\n`;
+      txtContent += `--------------------------------------\n\n`;
+    });
+  }
+
   return txtContent;
 }
 
@@ -244,5 +266,51 @@ export async function getAllFAQs(uid: string, selectedCompany: string = 'default
   });
 
   return faqsList;
+}
+
+export interface Scenario {
+  id: string;
+  name: string;
+  description: string;
+  condition: string;
+  thenAction: string;
+  elseAction?: string | null;
+  enabled: boolean;
+}
+
+/**
+ * Get all scenarios for a company (only enabled ones)
+ */
+export async function getAllScenarios(uid: string, selectedCompany: string = 'default'): Promise<Scenario[]> {
+  try {
+    const scenariosRef = db.collection(
+      `Users/${uid}/knowledgebases/${selectedCompany}/scenarios`
+    );
+    const scenariosSnapshot = await scenariosRef.get();
+
+    const scenariosList: Scenario[] = [];
+
+    scenariosSnapshot.docs.forEach((scenarioDoc) => {
+      const data = scenarioDoc.data();
+      // Only include enabled scenarios (default to true if not set)
+      if (data.enabled !== false) {
+        scenariosList.push({
+          id: scenarioDoc.id,
+          name: data.name || '',
+          description: data.description || '',
+          condition: data.condition || '',
+          thenAction: data.thenAction || '',
+          elseAction: data.elseAction || null,
+          enabled: true,
+        });
+      }
+    });
+
+    return scenariosList;
+  } catch (error) {
+    console.error('Error fetching scenarios:', error);
+    // Return empty array if scenarios collection doesn't exist yet
+    return [];
+  }
 }
 
