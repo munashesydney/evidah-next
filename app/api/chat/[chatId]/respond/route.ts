@@ -5,6 +5,7 @@ import {
   createErrorResponse,
 } from '@/lib/middleware/auth-middleware';
 import { processEmployeeChat, EmployeeProcessorMessage } from '@/lib/chat/employee-processor';
+import { ToolsState } from '@/stores/chat/useToolsStore';
 
 /**
  * POST /api/chat/[chatId]/respond
@@ -45,6 +46,7 @@ export async function POST(
       employeeId,
       personalityLevel = 2,
       conversationHistory = [],
+      toolsState,
     } = body;
 
     // Validate required fields
@@ -112,6 +114,7 @@ export async function POST(
             employeeId,
             personalityLevel,
             maxIterations: 10,
+            toolsState: toolsState as ToolsState | undefined,
             onStream: (event) => {
               // Send event to client
               const data = JSON.stringify(event);

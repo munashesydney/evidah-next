@@ -24,6 +24,25 @@ export const sharedTools = [
     description: "Get a programming joke",
     parameters: {},
   },
+  {
+    name: "escalate_to_human",
+    description: "Escalate the conversation to a human agent. Use this when you are not 100% certain about an answer, cannot find the information needed, or when the query is complex and requires human judgment. Honesty is critical - always escalate rather than guess.",
+    parameters: {
+      reason: {
+        type: "string",
+        description: "Brief explanation of why escalation is needed (e.g., 'Unable to find specific pricing information', 'Complex technical issue requiring human expertise', 'Uncertain about the correct action to take')",
+      },
+      urgency: {
+        type: "string",
+        description: "Urgency level of the escalation",
+        enum: ["low", "medium", "high"],
+      },
+      summary: {
+        type: "string",
+        description: "Brief summary of the issue or question for the human agent (optional)",
+      },
+    },
+  },
 ];
 
 // Employee-specific tool definitions

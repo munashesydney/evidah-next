@@ -150,3 +150,17 @@ body {
     border-color: var(--color-gray-200, currentColor);
   }
 }
+
+/* Shimmer animation for loading text */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+.shimmer-animation {
+  animation: shimmer 2s infinite;
+}

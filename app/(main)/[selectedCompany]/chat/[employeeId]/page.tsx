@@ -11,9 +11,10 @@ import ToolsPanel from '@/components/chat/tools-panel'
 import ChatListSidebar from '@/components/chat/chat-list-sidebar'
 import useConversationStore from '@/stores/chat/useConversationStore'
 import useChatListStore, { Chat } from '@/stores/chat/useChatListStore'
+import useToolsStore, { ToolsState } from '@/stores/chat/useToolsStore'
 import { convertMessagesToItems } from '@/lib/chat/message-converter'
 import { Message } from '@/lib/services/message-service'
-import type { Item } from '@/lib/chat/assistant'
+import type { Item, MessageItem, ContentItem } from '@/lib/chat/assistant'
 
 import { employees, type Employee } from '@/lib/services/employee-helpers'
 import type { ToolCallItem } from '@/lib/chat/assistant'
@@ -31,9 +32,11 @@ export default function ChatPage() {
   const [isAIOptionsPanelOpen, setIsAIOptionsPanelOpen] = useState(false)
   const [personalityLevel, setPersonalityLevel] = useState(2)
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
+  const [mode, setMode] = useState<'chat' | 'agent'>('agent')
   
   const { chatMessages, setChatMessages, resetConversation, isAssistantLoading } = useConversationStore()
   const { chats, activeChat, setChats, setActiveChat, addChat, removeChat, setLoading: setChatListLoading } = useChatListStore()
+  const toolsStore = useToolsStore()
   
   const isDarkMode = resolvedTheme === 'dark' || theme === 'dark'
 
@@ -446,6 +449,30 @@ export default function ChatPage() {
       })
       console.log('🚀 Calling server-side processor...')
 
+      // Get tools configuration based on mode
+      let toolsState: ToolsState
+      if (mode === 'chat') {
+        // Chat mode: only web search and file search enabled
+        toolsState = {
+          webSearchEnabled: true,
+          fileSearchEnabled: true,
+          functionsEnabled: false,
+          codeInterpreterEnabled: false,
+          webSearchConfig: toolsStore.webSearchConfig,
+        }
+      } else {
+        // Agent mode: use actual tools configuration from store
+        toolsState = {
+          webSearchEnabled: toolsStore.webSearchEnabled,
+          fileSearchEnabled: toolsStore.fileSearchEnabled,
+          functionsEnabled: toolsStore.functionsEnabled,
+          codeInterpreterEnabled: toolsStore.codeInterpreterEnabled,
+          webSearchConfig: toolsStore.webSearchConfig,
+        }
+      }
+
+      console.log(`[CHAT PAGE] Mode: ${mode}, Tools State:`, toolsState)
+
       // Call the new server-side API that handles everything
       const response = await fetch(`/api/chat/${currentActiveChat.id}/respond`, {
         method: 'POST',
@@ -459,6 +486,7 @@ export default function ChatPage() {
           employeeId,
           personalityLevel,
           conversationHistory,
+          toolsState,
         }),
       })
 
@@ -489,23 +517,24 @@ export default function ChatPage() {
       const updateStreamingMessage = (text: string) => {
         if (!streamingMessageId) return
         const { chatMessages } = useConversationStore.getState()
-        const updated = chatMessages.map((item: Item) => {
+        const updated: Item[] = chatMessages.map((item: Item) => {
           if (item.id === streamingMessageId && item.type === 'message') {
             const existingContent = item.content?.[0]
-            const contentItem =
+            const contentItem: ContentItem =
               existingContent && existingContent.type === 'output_text'
                 ? existingContent
-                : { type: 'output_text', text: '' }
-            return {
+                : { type: 'output_text' as const, text: '' }
+            const updatedItem: MessageItem = {
               ...item,
               content: [
                 {
                   ...contentItem,
-                  type: 'output_text',
+                  type: 'output_text' as const,
                   text,
                 },
               ],
             }
+            return updatedItem
           }
           return item
         })
@@ -527,11 +556,11 @@ export default function ChatPage() {
 
         const existing = chatMessages.find(item => item.type === 'tool_call' && item.id === data.id) as ToolCallItem | undefined
         if (existing) {
-          const updated = chatMessages.map(item => {
+          const updated: Item[] = chatMessages.map(item => {
             if (item.type === 'tool_call' && item.id === data.id) {
-              return {
+              const updatedItem: ToolCallItem = {
                 ...item,
-                status: 'in_progress',
+                status: 'in_progress' as const,
                 name: data.name ?? item.name,
                 arguments:
                   typeof data.arguments === 'string'
@@ -540,6 +569,7 @@ export default function ChatPage() {
                       ? JSON.stringify(data.arguments)
                       : item.arguments,
               }
+              return updatedItem
             }
             return item
           })
@@ -571,14 +601,15 @@ export default function ChatPage() {
         const { chatMessages } = store
         const setMessages = store.setChatMessages
         let changed = false
-        const updated = chatMessages.map(item => {
+        const updated: Item[] = chatMessages.map(item => {
           if (item.type === 'tool_call' && item.id === data.id) {
             changed = true
-            return {
+            const updatedItem: ToolCallItem = {
               ...item,
-              status: 'completed',
+              status: 'completed' as const,
               output: data.result ? JSON.stringify(data.result) : item.output,
             }
+            return updatedItem
           }
           return item
         })
@@ -730,6 +761,8 @@ export default function ChatPage() {
                 isAIOptionsPanelOpen={isAIOptionsPanelOpen}
                 employee={employee}
                 centered={true}
+                mode={mode}
+                onModeChange={setMode}
               />
             </div>
           </div>
@@ -751,6 +784,8 @@ export default function ChatPage() {
               onToggleAIOptions={() => setIsAIOptionsPanelOpen(!isAIOptionsPanelOpen)}
               isAIOptionsPanelOpen={isAIOptionsPanelOpen}
               employee={employee}
+              mode={mode}
+              onModeChange={setMode}
             />
           </div>
         )}

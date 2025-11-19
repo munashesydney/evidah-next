@@ -1,4 +1,4 @@
-import { getAllToolsForEmployee } from "@/config/chat/tools-list";
+import { getAllToolsForEmployee, getSharedTools } from "@/config/chat/tools-list";
 import { ToolsState, WebSearchConfig } from "@/stores/chat/useToolsStore";
 import { getOrCreateVectorStore } from "@/lib/services/vector-store-helper";
 
@@ -10,7 +10,8 @@ export const getTools = async (
   toolsState: ToolsState,
   uid?: string,
   selectedCompany?: string,
-  employeeId?: string
+  employeeId?: string,
+  isActionEvent?: boolean
 ) => {
   const {
     webSearchEnabled,
@@ -169,6 +170,31 @@ export const getTools = async (
         };
       })
     );
+
+    // If this is an action event, add escalate_to_human tool
+    if (isActionEvent && uid && selectedCompany) {
+      const sharedTools = getSharedTools();
+      const escalateTool = sharedTools.find(tool => tool.name === 'escalate_to_human');
+      
+      if (escalateTool) {
+        // Determine required parameters for escalate_to_human
+        const required = ['reason', 'urgency']; // summary is optional
+        
+        tools.push({
+          type: "function" as const,
+          name: escalateTool.name,
+          description: escalateTool.description,
+          parameters: {
+            type: "object" as const,
+            properties: { ...escalateTool.parameters },
+            required,
+            additionalProperties: false,
+          },
+          strict: false, // summary is optional
+        });
+        console.log(`[TOOLS] ✅ Added escalate_to_human tool for action event`);
+      }
+    }
   }
 
   return tools;

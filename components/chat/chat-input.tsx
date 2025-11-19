@@ -22,6 +22,8 @@ interface ChatInputProps {
   isAIOptionsPanelOpen: boolean
   employee: Employee
   centered?: boolean
+  mode?: 'chat' | 'agent'
+  onModeChange?: (mode: 'chat' | 'agent') => void
 }
 
 export default function ChatInput({
@@ -31,11 +33,12 @@ export default function ChatInput({
   isAIOptionsPanelOpen,
   employee,
   centered = false,
+  mode = 'agent',
+  onModeChange,
 }: ChatInputProps) {
   const [message, setMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
-  const [selectedModel, setSelectedModel] = useState('o3-mini')
-  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
+  const [isModeDropdownOpen, setIsModeDropdownOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -51,18 +54,18 @@ export default function ChatInput({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsModelDropdownOpen(false)
+        setIsModeDropdownOpen(false)
       }
     }
 
-    if (isModelDropdownOpen) {
+    if (isModeDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside)
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [isModelDropdownOpen])
+  }, [isModeDropdownOpen])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -93,7 +96,12 @@ export default function ChatInput({
   // Check if send button should be enabled
   const isSendEnabled = message.trim().length > 0 && !isDisabled && !isSending
 
-  const models = ['o3-mini', 'gpt-4o', 'gpt-4o-mini']
+  const handleModeChange = (newMode: 'chat' | 'agent') => {
+    if (onModeChange) {
+      onModeChange(newMode)
+    }
+    setIsModeDropdownOpen(false)
+  }
 
   return (
     <div className={`flex-shrink-0 ${centered ? '' : 'p-4 sm:p-6'} bg-transparent`}>
@@ -118,40 +126,45 @@ export default function ChatInput({
 
             {/* Bottom row with controls */}
             <div className="flex items-center justify-between px-4 pb-4 gap-2">
-              {/* Left side: Model dropdown, Globe, Attachment */}
+              {/* Left side: Mode dropdown, Globe, Attachment */}
               <div className="flex items-center gap-2">
-                {/* Model Selection Dropdown */}
+                {/* Mode Selection Dropdown */}
                 <div className="relative" ref={dropdownRef}>
                   <button
                     type="button"
-                    onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+                    onClick={() => setIsModeDropdownOpen(!isModeDropdownOpen)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm text-gray-700 dark:text-gray-300"
                   >
                     <Bot size={16} className="text-gray-600 dark:text-gray-400" />
-                    <span>{selectedModel}</span>
+                    <span className="capitalize">{mode}</span>
                     <ChevronDown size={14} className="text-gray-500 dark:text-gray-400" />
                   </button>
 
                   {/* Dropdown menu */}
-                  {isModelDropdownOpen && (
-                    <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[140px] z-50">
-                      {models.map((model) => (
-                        <button
-                          key={model}
-                          type="button"
-                          onClick={() => {
-                            setSelectedModel(model)
-                            setIsModelDropdownOpen(false)
-                          }}
-                          className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
-                            selectedModel === model
-                              ? 'text-gray-900 dark:text-gray-100 font-medium'
-                              : 'text-gray-600 dark:text-gray-400'
-                          }`}
-                        >
-                          {model}
-                        </button>
-                      ))}
+                  {isModeDropdownOpen && (
+                    <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[120px] z-50">
+                      <button
+                        type="button"
+                        onClick={() => handleModeChange('chat')}
+                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+                          mode === 'chat'
+                            ? 'text-gray-900 dark:text-gray-100 font-medium'
+                            : 'text-gray-600 dark:text-gray-400'
+                        }`}
+                      >
+                        Chat
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleModeChange('agent')}
+                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+                          mode === 'agent'
+                            ? 'text-gray-900 dark:text-gray-100 font-medium'
+                            : 'text-gray-600 dark:text-gray-400'
+                        }`}
+                      >
+                        Agent
+                      </button>
                     </div>
                   )}
                 </div>

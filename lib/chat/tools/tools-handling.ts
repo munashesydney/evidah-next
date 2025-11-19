@@ -58,6 +58,7 @@ const employeeSpecificFunctions = [
   'create_article',
   'update_article',
   'delete_article',
+  'escalate_to_human',
 ] as const;
 
 export const handleTool = async (

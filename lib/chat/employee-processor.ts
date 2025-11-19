@@ -5,6 +5,7 @@ import { getTools } from '@/lib/chat/tools/tools';
 import { handleTool } from '@/lib/chat/tools/tools-handling';
 import { functionsMap } from '@/config/chat/functions';
 import { MessageService } from '@/lib/services/message-service';
+import { ToolsState } from '@/stores/chat/useToolsStore';
 
 export interface EmployeeProcessorMessage {
   role: 'user' | 'assistant';
@@ -19,6 +20,7 @@ export interface EmployeeProcessorOptions {
   uid: string;
   employeeId?: string;
   personalityLevel?: number;
+  toolsState?: ToolsState;
   onStream?: (event: StreamEvent) => void;
   // For action events
   isActionEvent?: boolean;
@@ -53,6 +55,7 @@ export async function processEmployeeChat(
     uid,
     employeeId,
     personalityLevel = 2,
+    toolsState: providedToolsState,
     onStream,
     isActionEvent = false,
     actionId,
@@ -68,18 +71,19 @@ export async function processEmployeeChat(
     console.log(`[EMPLOYEE PROCESSOR] Vector store: ${vectorStoreId}`);
 
     // Build system prompt
-    const systemPrompt = await getDeveloperPrompt(uid, companyId, employeeId, personalityLevel);
-    console.log(`[EMPLOYEE PROCESSOR] System prompt generated for ${employeeId}`);
+    const systemPrompt = await getDeveloperPrompt(uid, companyId, employeeId, personalityLevel, isActionEvent);
+    console.log(`[EMPLOYEE PROCESSOR] System prompt generated for ${employeeId}, isActionEvent: ${isActionEvent}`);
 
-    // Get tools configuration
-    const toolsState = {
+    // Get tools configuration - use provided toolsState or default to all enabled
+    const toolsState: ToolsState = providedToolsState || {
       fileSearchEnabled: true,
       webSearchEnabled: true,
       functionsEnabled: true,
-      codeInterpreterEnabled: false,
+      codeInterpreterEnabled: true,
       webSearchConfig: {},
     };
-    const tools = await getTools(toolsState, uid, companyId, employeeId);
+    console.log(`[EMPLOYEE PROCESSOR] Tools configuration:`, toolsState);
+    const tools = await getTools(toolsState, uid, companyId, employeeId, isActionEvent);
     console.log(`[EMPLOYEE PROCESSOR] Generated ${tools.length} tools`);
 
     // Initialize OpenAI

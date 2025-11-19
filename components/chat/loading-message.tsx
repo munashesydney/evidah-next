@@ -29,20 +29,20 @@ interface LoadingMessageProps {
 }
 
 const LoadingMessage: React.FC<LoadingMessageProps> = ({ employee = defaultEmployee }) => {
-  // Get dot color based on employee
-  const getDotColor = () => {
+  // Get spinner color based on employee
+  const getSpinnerColor = () => {
     const id = employee.id
     switch (id) {
       case 'emma':
-        return 'bg-pink-500'
+        return 'border-pink-500'
       case 'marquavious':
-        return 'bg-blue-500'
+        return 'border-blue-500'
       case 'charlie':
-        return 'bg-amber-500'
+        return 'border-amber-500'
       case 'sung-wen':
-        return 'bg-emerald-500'
+        return 'border-emerald-500'
       default:
-        return 'bg-violet-500'
+        return 'border-violet-500'
     }
   }
 
@@ -53,12 +53,19 @@ const LoadingMessage: React.FC<LoadingMessageProps> = ({ employee = defaultEmplo
         {employee.name.charAt(0)}
       </div>
       
-      {/* Loading indicator */}
-      <div className="bg-white/90 dark:bg-gray-800/90 p-4 rounded-2xl rounded-tl-md shadow-lg border border-gray-200/50 dark:border-gray-700/50 backdrop-blur-sm">
-        <div className="flex space-x-1">
-          <div className={`w-2 h-2 rounded-full ${getDotColor()} animate-bounce`} style={{ animationDelay: '0ms' }}></div>
-          <div className={`w-2 h-2 rounded-full ${getDotColor()} animate-bounce`} style={{ animationDelay: '150ms' }}></div>
-          <div className={`w-2 h-2 rounded-full ${getDotColor()} animate-bounce`} style={{ animationDelay: '300ms' }}></div>
+      {/* Loading indicator - Chat bubble with shimmer */}
+      <div className="relative overflow-hidden bg-gray-100 dark:bg-gray-800 px-4 py-3 rounded-2xl rounded-tl-md shadow-sm">
+        {/* Shimmer effect on entire card */}
+        <div 
+          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 dark:via-gray-600/40 to-transparent shimmer-animation"
+        ></div>
+        
+        {/* Content */}
+        <div className="flex items-center gap-2.5 relative z-10">
+          {/* Circular spinner */}
+          <div className={`w-4 h-4 border-2 ${getSpinnerColor()} border-t-transparent rounded-full animate-spin`}></div>
+          {/* Thinking text */}
+          <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">Thinking</span>
         </div>
       </div>
     </div>

@@ -1625,6 +1625,37 @@ export const delete_article = async ({
   return res;
 };
 
+/**
+ * Escalate to human agent
+ * Creates a question chat with Sung Wen and notifies the user via email
+ */
+export const escalate_to_human = async ({
+  uid,
+  selectedCompany,
+  reason,
+  urgency,
+  summary,
+}: {
+  uid: string;
+  selectedCompany: string;
+  reason: string;
+  urgency: 'low' | 'medium' | 'high';
+  summary?: string;
+}) => {
+  // Import the handler from public-assistant tools
+  const { executePublicAssistantTool } = await import('@/lib/public-assistant/tools');
+  
+  const result = await executePublicAssistantTool('escalate_to_human', {
+    uid,
+    companyId: selectedCompany,
+    reason,
+    urgency,
+    summary,
+  });
+
+  return result;
+};
+
 export const functionsMap = {
   get_weather: get_weather,
   get_joke: get_joke,
@@ -1682,5 +1713,6 @@ export const functionsMap = {
   create_article: create_article,
   update_article: update_article,
   delete_article: delete_article,
+  escalate_to_human: escalate_to_human,
 };
 

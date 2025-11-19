@@ -10,19 +10,24 @@ import {
   updateTicket,
 } from './email-helpers';
 
+// Force dynamic rendering to prevent static generation
+export const dynamic = 'force-dynamic';
+
 // Initialize Firebase Admin if not already initialized
-if (!admin.apps.length) {
-  try {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      }),
-      databaseURL: process.env.FIREBASE_DATABASE_URL,
-    });
-  } catch (error) {
-    console.log('Firebase admin initialization error', error);
+function initializeFirebase() {
+  if (!admin.apps.length) {
+    try {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        }),
+        databaseURL: process.env.FIREBASE_DATABASE_URL,
+      });
+    } catch (error) {
+      console.log('Firebase admin initialization error', error);
+    }
   }
 }
 
@@ -55,6 +60,9 @@ interface FileUrl {
  * - fileUrls: Array of file attachments (optional)
  */
 export async function POST(request: NextRequest) {
+  // Initialize Firebase only when the API is called, not during build
+  initializeFirebase();
+  
   try {
     const body = await request.json();
     const {

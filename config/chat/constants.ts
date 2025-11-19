@@ -223,7 +223,8 @@ export async function getDeveloperPrompt(
   uid?: string,
   selectedCompany?: string,
   employeeId?: string,
-  personalityLevel: number = 2
+  personalityLevel: number = 2,
+  isActionEvent?: boolean
 ): Promise<string> {
   const now = new Date();
   const dayName = now.toLocaleDateString("en-US", { weekday: "long" });
@@ -286,6 +287,29 @@ export async function getDeveloperPrompt(
 
   // Add date
   prompt += `\n\nToday is ${dayName}, ${monthName} ${dayOfMonth}, ${year}.`;
+
+  // Add action-specific instructions if this is an action event
+  if (isActionEvent) {
+    prompt += `\n\nACTION EVENT MODE - FULL AUTONOMY:
+You are currently processing an ACTION EVENT. An action event occurs when a specific event happens in the system and you need to respond to it based on the action prompt and guidelines provided.
+
+CRITICAL - AUTONOMOUS OPERATION:
+- You are operating in FULLY AUTONOMOUS mode - execute actions without asking for user permission first
+- You will be given specific guidelines and instructions for this action - follow them and do what you think is best
+- Make decisions and take actions proactively based on the action prompt and available information
+- Do not ask for confirmation before executing actions - proceed with what you determine is the best course of action
+
+CRITICAL - HONESTY & ESCALATION:
+- Honesty is REQUIRED for your training and improvement
+- If you are not 100% certain about an answer or the correct action to take, you MUST IMMEDIATELY escalate using the escalate_to_human function
+- Never guess or provide uncertain information - it's better to escalate than to provide incorrect information
+- If you don't know something or are uncertain about the best approach, call escalate_to_human with:
+  - reason: Clear explanation of why you need help
+  - urgency: low, medium, or high based on the situation
+  - summary: Brief summary of the issue (optional)
+
+Remember: In action event mode, you should be proactive and autonomous, but always honest about your limitations. When in doubt, escalate.`;
+  }
 
   return prompt.trim();
 }
