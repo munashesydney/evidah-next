@@ -314,12 +314,16 @@ export async function processEmployeeChat(
               status: 'completed',
             });
 
-            // Add function call and result to conversation history
+            // ✅ RE-ENABLE: add the function_call itself to the history
+            // The API requires both function_call and function_call_output to be present
             conversationHistory.push(sanitizeConversationItem(item));
+
+            // ✅ Keep output as a separate item linked via call_id
             conversationHistory.push(sanitizeConversationItem({
               type: 'function_call_output',
               call_id: item.call_id,
               output: JSON.stringify(result),
+              id: `${item.id}_output`,
             }));
 
             // Stream tool call complete
@@ -372,9 +376,9 @@ export async function processEmployeeChat(
             streamingToolCalls.delete(item.id);
           }
         } else if (item.type === 'reasoning') {
-          // Reasoning items are part of built-in tool execution
-          // Do NOT feed them back into conversationHistory in stateless mode
-          // They're handled internally by OpenAI
+          // ✅ DO keep reasoning so any function_call items you replay still
+          // have the reasoning trace the API expects
+          conversationHistory.push(sanitizeConversationItem(item));
         }
       }
 

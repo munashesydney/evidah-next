@@ -164,13 +164,21 @@ export async function processEmployeeResponse(
         
         const result = await executePublicAssistantTool(item.name, argsWithContext);
         
-        // Add function call and result to conversation history
+        // ✅ RE-ENABLE: add the function_call itself to the history
+        // The API requires both function_call and function_call_output to be present
         conversationHistory.push(item);
+        
+        // ✅ Keep output as a separate item linked via call_id
         conversationHistory.push({
           type: 'function_call_output',
           call_id: item.call_id,
           output: JSON.stringify(result),
+          id: `${item.id}_output`,
         });
+      } else if (item.type === 'reasoning') {
+        // ✅ DO keep reasoning so any function_call items you replay still
+        // have the reasoning trace the API expects
+        conversationHistory.push(item);
       }
     }
 
