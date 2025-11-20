@@ -31,6 +31,7 @@ const triggers = [
   { id: 'chat_message', label: 'Chat Message Received' },
   { id: 'article_created', label: 'Article Created' },
   { id: 'article_updated', label: 'Article Updated' },
+  { id: 'question_answered', label: 'Question Answered' },
 ];
 
 export default function ActionsPage() {

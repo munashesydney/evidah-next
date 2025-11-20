@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import Image from 'next/image';
+import { ExclamationTriangleIcon, ExclamationCircleIcon, ChatBubbleLeftEllipsisIcon, QuestionMarkCircleIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
 
 interface QuestionChat {
   id: string;
@@ -31,6 +32,7 @@ export default function QuestionsPage() {
   const [uid, setUid] = useState<string | null>(null);
   const [questions, setQuestions] = useState<QuestionChat[]>([]);
   const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'answered' | 'unanswered'>('unanswered');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -90,24 +92,68 @@ export default function QuestionsPage() {
     }
   };
 
-  const getUrgencyIcon = (urgency?: string) => {
+  const UrgencyIcon = ({ urgency }: { urgency?: string }) => {
     switch (urgency) {
       case 'high':
-        return '🚨';
+        return <ExclamationTriangleIcon className="w-6 h-6 text-red-500" />;
       case 'medium':
-        return '⚠️';
+        return <ExclamationCircleIcon className="w-6 h-6 text-yellow-500" />;
       case 'low':
-        return '💬';
+        return <ChatBubbleLeftEllipsisIcon className="w-6 h-6 text-emerald-500" />;
       default:
-        return '❓';
+        return <QuestionMarkCircleIcon className="w-6 h-6 text-gray-400" />;
     }
   };
 
-  const formatDate = (timestamp: any) => {
-    if (!timestamp) return '';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleString();
+  const convertToDate = (value: any): Date | null => {
+    if (!value) return null;
+
+    // Firestore Timestamp instance
+    if (typeof value.toDate === 'function') {
+      return value.toDate();
+    }
+
+    // Firestore timestamp object from JSON ({seconds, nanoseconds} or {_seconds, _nanoseconds})
+    if (typeof value === 'object') {
+      const seconds = value.seconds ?? value._seconds;
+      const nanoseconds = value.nanoseconds ?? value._nanoseconds;
+
+      if (typeof seconds === 'number') {
+        const millis = seconds * 1000 + (typeof nanoseconds === 'number' ? nanoseconds / 1_000_000 : 0);
+        return new Date(millis);
+      }
+    }
+
+    // ISO strings or other date-compatible values
+    const date = new Date(value);
+    return isNaN(date.getTime()) ? null : date;
   };
+
+  const formatDate = (timestamp: any) => {
+    const date = convertToDate(timestamp);
+    if (!date) return '—';
+
+    const options: Intl.DateTimeFormatOptions = {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    };
+
+    return date.toLocaleString(undefined, options);
+  };
+
+  const filteredQuestions = questions.filter((question) => {
+    if (statusFilter === 'answered') {
+      return question.metadata?.escalation === false;
+    }
+    if (statusFilter === 'unanswered') {
+      return question.metadata?.escalation !== false;
+    }
+    return true;
+  });
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8 w-full max-w-7xl mx-auto">
@@ -132,13 +178,39 @@ export default function QuestionsPage() {
         </div>
       </div>
 
+      {/* Filter Controls */}
+      <div className="mb-6">
+        <div className="inline-flex rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-1">
+          {[
+            { id: 'all', label: 'All' },
+            { id: 'answered', label: 'Answered' },
+            { id: 'unanswered', label: 'Unanswered' },
+          ].map((filter) => {
+            const isActive = statusFilter === filter.id;
+            return (
+              <button
+                key={filter.id}
+                onClick={() => setStatusFilter(filter.id as typeof statusFilter)}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  isActive
+                    ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-200'
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                }`}
+              >
+                {filter.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Questions List */}
       <div className="space-y-4">
         {loading ? (
           <div className="text-center py-12">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-violet-500"></div>
           </div>
-        ) : questions.length === 0 ? (
+        ) : filteredQuestions.length === 0 ? (
           <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700">
             <svg
               className="mx-auto h-12 w-12 text-gray-400"
@@ -159,7 +231,15 @@ export default function QuestionsPage() {
             </p>
           </div>
         ) : (
-          questions.map((question) => (
+          filteredQuestions.map((question) => {
+            const isAnswered = question.metadata?.escalation === false;
+            const statusClasses = isAnswered
+              ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-200'
+              : 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-200';
+
+            const statusLabel = isAnswered ? 'Answered' : 'Awaiting Answer';
+
+            return (
             <div
               key={question.id}
               onClick={() => handleQuestionClick(question.id)}
@@ -169,13 +249,20 @@ export default function QuestionsPage() {
                 <div className="flex-1 min-w-0">
                   {/* Header */}
                   <div className="flex items-center space-x-2 mb-3">
-                    <span className="text-2xl">{getUrgencyIcon(question.metadata?.urgency)}</span>
+                    <span className="flex items-center justify-center w-8 h-8">
+                      <UrgencyIcon urgency={question.metadata?.urgency} />
+                    </span>
                     <span
                       className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getUrgencyColor(
                         question.metadata?.urgency
                       )}`}
                     >
                       {question.metadata?.urgency?.toUpperCase() || 'QUESTION'}
+                    </span>
+                    <span
+                      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${statusClasses}`}
+                    >
+                      {statusLabel}
                     </span>
                     <span className="text-xs text-gray-500 dark:text-gray-400">
                       {formatDate(question.createdAt)}
@@ -204,23 +291,12 @@ export default function QuestionsPage() {
 
                 {/* Arrow */}
                 <div className="ml-4 flex-shrink-0">
-                  <svg
-                    className="w-6 h-6 text-gray-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
+                  <ArrowRightIcon className="w-6 h-6 text-gray-400" />
                 </div>
               </div>
             </div>
-          ))
+            );
+          })
         )}
       </div>
 

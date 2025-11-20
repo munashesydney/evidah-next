@@ -294,6 +294,10 @@ export async function processEmployeeChat(
           }) as typeof fetch;
 
           try {
+          if (item.name === 'save_answered_question') {
+            args.chat_id = chatId;
+          }
+
             const result = await handleTool(
               item.name as keyof typeof functionsMap,
               args,

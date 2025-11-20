@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { MessageService } from '@/lib/services/message-service';
+import { ChatService } from '@/lib/services/chat-service';
 import {
   requireAuth,
   createErrorResponse,
@@ -74,10 +75,38 @@ export async function POST(
     });
     console.log(`[CHAT RESPOND] New user message: ${message.substring(0, 100)}${message.length > 100 ? '...' : ''}`);
 
+    const chat = await ChatService.getChat(userId, companyId, chatId);
+    if (!chat) {
+      return createErrorResponse('NOT_FOUND', 'Chat not found', 404);
+    }
+
+    const chatMetadata = chat.metadata || {};
+    const isEscalationChat = chatMetadata.escalation === true;
+    const isQuestionChat = chatMetadata.type === 'question';
+
+    let messageContent = message;
+    let shouldMarkHumanAnswer = false;
+
+    if (
+      isEscalationChat &&
+      isQuestionChat &&
+      !chatMetadata.humanAnswerTagged
+    ) {
+      const trimmedContent = message.trim();
+      if (!trimmedContent.startsWith('[HUMAN-ANSWER]')) {
+        messageContent = trimmedContent
+          ? `[HUMAN-ANSWER] ${trimmedContent}`
+          : '[HUMAN-ANSWER]';
+      } else {
+        messageContent = trimmedContent;
+      }
+      shouldMarkHumanAnswer = true;
+    }
+
     // Save user message to database
     try {
       await MessageService.createMessage(userId, companyId, chatId, {
-        content: message,
+        content: messageContent,
         role: 'user',
       });
       console.log(`[CHAT RESPOND] ✅ User message saved`);
@@ -90,10 +119,19 @@ export async function POST(
       );
     }
 
+    if (shouldMarkHumanAnswer) {
+      await ChatService.updateChat(userId, companyId, chatId, {
+        metadata: {
+          ...chatMetadata,
+          humanAnswerTagged: true,
+        },
+      });
+    }
+
     // Build conversation history including the new user message
     const messages: EmployeeProcessorMessage[] = [
       ...conversationHistory,
-      { role: 'user', content: message },
+      { role: 'user', content: messageContent },
     ];
 
     console.log(`[CHAT RESPOND] === FINAL MESSAGE THREAD FOR AI ===`);

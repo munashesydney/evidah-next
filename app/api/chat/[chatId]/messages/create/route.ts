@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { MessageService } from '@/lib/services/message-service';
+import { ChatService } from '@/lib/services/chat-service';
 import {
   requireAuth,
   createErrorResponse,
@@ -68,18 +69,56 @@ export async function POST(
       );
     }
 
+    const chat = await ChatService.getChat(userId, companyId, chatId);
+    if (!chat) {
+      return createErrorResponse('NOT_FOUND', 'Chat not found', 404);
+    }
+
+    const chatMetadata = chat.metadata || {};
+    const isEscalationChat = chatMetadata.escalation === true;
+    const isQuestionChat = chatMetadata.type === 'question';
+
+    let messageContent = content;
+    let shouldMarkHumanAnswer = false;
+
+    if (
+      role === 'user' &&
+      isEscalationChat &&
+      isQuestionChat &&
+      !chatMetadata.humanAnswerTagged
+    ) {
+      const trimmedContent = content.trim();
+      if (!trimmedContent.startsWith('[HUMAN-ANSWER]')) {
+        messageContent = trimmedContent
+          ? `[HUMAN-ANSWER] ${trimmedContent}`
+          : '[HUMAN-ANSWER]';
+      } else {
+        messageContent = trimmedContent;
+      }
+      shouldMarkHumanAnswer = true;
+    }
+
     // Create message
     const message = await MessageService.createMessage(
       userId,
       companyId,
       chatId,
       {
-        content,
+        content: messageContent,
         role,
         toolCalls,
         metadata,
       }
     );
+
+    if (shouldMarkHumanAnswer) {
+      await ChatService.updateChat(userId, companyId, chatId, {
+        metadata: {
+          ...chatMetadata,
+          humanAnswerTagged: true,
+        },
+      });
+    }
 
     return createSuccessResponse(
       {

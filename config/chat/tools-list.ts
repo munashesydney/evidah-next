@@ -874,6 +874,32 @@ const employeeSpecificTools = {
         },
       },
     },
+    {
+      name: "save_answered_question",
+      description: "Save a question and its answer to the answered collection in the knowledge base. Used for special [HUMAN-ANSWER] chats.",
+      parameters: {
+        question: {
+          type: "string",
+          description: "The question that was asked (required)",
+        },
+        answer: {
+          type: "string",
+          description: "The answer that was provided (required)",
+        },
+        ticket_id: {
+          type: "string",
+          description: "The ID of the support ticket associated with this question (optional)",
+        },
+        session_id: {
+          type: "string",
+          description: "The ID of the chat session where this question was asked (optional)",
+        },
+        more_info: {
+          type: "string",
+          description: "Additional information or context about the question and answer (optional)",
+        },
+      },
+    },
   ],
 };
 

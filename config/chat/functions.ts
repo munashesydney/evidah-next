@@ -1801,6 +1801,49 @@ export const escalate_to_human = async ({
   return result;
 };
 
+/**
+ * Save answered question to the knowledge base
+ * Adds a document to the answered collection for future reference
+ */
+export const save_answered_question = async ({
+  uid,
+  selectedCompany,
+  question,
+  answer,
+  ticket_id,
+  session_id,
+  more_info,
+  chat_id,
+}: {
+  uid: string;
+  selectedCompany: string;
+  question: string;
+  answer: string;
+  ticket_id?: string;
+  session_id?: string;
+  more_info?: string;
+  chat_id?: string;
+}) => {
+  const res = await fetch(`/api/answered`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      uid,
+      selectedCompany,
+      question,
+      answer,
+      ticket_id,
+      session_id,
+      more_info,
+      chat_id,
+    }),
+  }).then((res) => res.json());
+
+  return res;
+};
+
 export const functionsMap = {
   get_weather: get_weather,
   get_joke: get_joke,
@@ -1863,5 +1906,6 @@ export const functionsMap = {
   update_article: update_article,
   delete_article: delete_article,
   escalate_to_human: escalate_to_human,
+  save_answered_question: save_answered_question,
 };
 

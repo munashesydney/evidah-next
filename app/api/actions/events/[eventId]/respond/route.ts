@@ -84,6 +84,9 @@ export async function POST(
     // Build the user message with action context
     const userMessage = `Action Triggered: ${actionPrompt}
 
+Conversation History:
+${JSON.stringify(conversationHistory, null, 2)}
+
 Trigger Data:
 ${JSON.stringify(triggerData, null, 2)}
 
@@ -91,7 +94,6 @@ Please execute this action based on the provided context and conversation histor
 
     // Build conversation history including the action prompt
     const messages: EmployeeProcessorMessage[] = [
-      ...conversationHistory,
       { role: 'user', content: userMessage },
     ];
 

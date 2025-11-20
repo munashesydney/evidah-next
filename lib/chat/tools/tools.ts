@@ -146,6 +146,7 @@ export const getTools = async (
           'create_category': ['name', 'description', 'link'],
           'update_category': ['categoryId'], // At least one of name/description/link should be provided, but we'll let the API handle validation
           'delete_category': ['categoryId'],
+          'save_answered_question': ['question', 'answer'], // ticket_id, session_id, and more_info are optional
         };
         
         // Use function-specific requirements if available, otherwise use all params as required
