@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/workers/chat-processor",
-      "schedule": "*/10 * * * * *"
+      "schedule": "*/1 * * * *"
     }
   ],
   "functions": {
