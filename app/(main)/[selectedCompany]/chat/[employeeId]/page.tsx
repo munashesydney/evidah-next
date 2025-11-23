@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import { auth } from '@/lib/firebase'
+import { auth, db } from '@/lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
+import { collection, query, orderBy, onSnapshot, doc } from 'firebase/firestore'
 import ChatMessages from '@/components/chat/chat-messages'
 import ChatInput from '@/components/chat/chat-input'
 import ToolsPanel from '@/components/chat/tools-panel'
@@ -33,6 +34,7 @@ export default function ChatPage() {
   const [personalityLevel, setPersonalityLevel] = useState(2)
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
   const [mode, setMode] = useState<'chat' | 'agent'>('agent')
+  const activeListenersRef = useRef<{ unsubscribe: () => void; chatId: string }[]>([])
   
   const { chatMessages, setChatMessages, resetConversation, isAssistantLoading } = useConversationStore()
   const { chats, activeChat, setChats, setActiveChat, addChat, removeChat, setLoading: setChatListLoading } = useChatListStore()
@@ -133,6 +135,19 @@ export default function ChatPage() {
     try {
       setIsLoadingMessages(true)
       setActiveChat(chat)
+      
+      // Reset loading state when switching chats (in case a job is running in another chat)
+      const { setAssistantLoading } = useConversationStore.getState()
+      setAssistantLoading(false)
+      
+      // Clean up any active listeners from previous chats
+      activeListenersRef.current.forEach(({ unsubscribe, chatId }) => {
+        if (chatId !== chat.id) {
+          console.log(`[CHAT PAGE] Cleaning up listener for chat: ${chatId}`)
+          unsubscribe()
+        }
+      })
+      activeListenersRef.current = activeListenersRef.current.filter(l => l.chatId === chat.id)
       
       // Save active chat to localStorage for persistence
       localStorage.setItem(`activeChat_${selectedCompany}_${employeeId}`, chat.id)
@@ -473,7 +488,7 @@ export default function ChatPage() {
 
       console.log(`[CHAT PAGE] Mode: ${mode}, Tools State:`, toolsState)
 
-      // Call the new server-side API that handles everything
+      // Call the API to enqueue the job
       const response = await fetch(`/api/chat/${currentActiveChat.id}/respond`, {
         method: 'POST',
         headers: {
@@ -491,13 +506,27 @@ export default function ChatPage() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to process message')
+        throw new Error('Failed to enqueue message')
       }
 
-      // Helpers for streaming assistant message into the UI
+      const responseData = await response.json()
+      const { jobId } = responseData
+
+      console.log(`[CHAT PAGE] ✅ Job enqueued: ${jobId}`)
+
+      // Set up real-time listener for job streaming updates
+      const updatesRef = collection(
+        db,
+        `Users/${userId}/knowledgebases/${selectedCompany}/chatJobs/${jobId}/updates`
+      )
+      const updatesQuery = query(updatesRef, orderBy('timestamp', 'asc'))
+
+      // Track streaming state
       let streamingMessageId: string | null = null
       let streamingAssistantText = ''
+      const processedUpdateIds = new Set<string>()
 
+      // Helpers for streaming assistant message into the UI
       const ensureStreamingMessage = () => {
         if (streamingMessageId) return
         streamingMessageId = `stream-${Date.now()}`
@@ -618,25 +647,31 @@ export default function ChatPage() {
         }
       }
 
-      // Stream the response
-      const reader = response.body!.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
+      // Listen to real-time updates from the job
+      const unsubscribe = onSnapshot(
+        updatesQuery,
+        async (snapshot) => {
+          // Only process updates if this is still the active chat
+          const currentActiveChatId = useChatListStore.getState().activeChat?.id
+          if (currentActiveChat?.id !== currentActiveChatId) {
+            console.log(`[CHAT PAGE] Ignoring update - chat switched (job: ${currentActiveChat?.id}, active: ${currentActiveChatId})`)
+            return
+          }
 
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+              const updateId = change.doc.id
+              if (processedUpdateIds.has(updateId)) return
+              processedUpdateIds.add(updateId)
 
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n\n')
-        buffer = lines.pop() || ''
+              const updateData = change.doc.data()
+              const event = {
+                type: updateData.type,
+                data: updateData.data,
+              }
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const dataStr = line.slice(6)
-            try {
-              const event = JSON.parse(dataStr)
-              
+              console.log(`[CHAT PAGE] 📡 Received streaming update: ${event.type}`)
+
               switch (event.type) {
                 case 'message_delta':
                   {
@@ -649,62 +684,169 @@ export default function ChatPage() {
                     }
                   }
                   break
-                
+
                 case 'tool_call_start':
                   console.log('🔧 Tool call started:', event.data.name)
                   handleToolCallStart(event.data)
                   break
-                
+
                 case 'tool_call_complete':
                   console.log('✅ Tool call completed:', event.data.name)
                   handleToolCallComplete(event.data)
                   break
-                
+
                 case 'assistant_message_saved':
                   console.log('💾 Message saved:', event.data.messageNumber)
+                  // Reload messages from database to get the final saved message
+                  setTimeout(async () => {
+                    try {
+                      const messagesResponse = await fetch(
+                        `/api/chat/${currentActiveChat.id}/messages/list?companyId=${selectedCompany}&page=1&limit=100`,
+                        {
+                          headers: {
+                            Authorization: `Bearer ${token}`,
+                          },
+                        }
+                      )
+
+                      if (messagesResponse.ok) {
+                        const data = await messagesResponse.json()
+                        const { convertMessagesToItems, convertMessagesToConversationHistory } = await import('@/lib/chat/message-converter')
+                        const items = convertMessagesToItems(data.messages)
+                        const conversationHistory = convertMessagesToConversationHistory(data.messages)
+
+                        const { setConversationItems } = useConversationStore.getState()
+                        setChatMessages(items)
+                        setConversationItems(conversationHistory)
+                        streamingMessageId = null
+                        streamingAssistantText = ''
+                      }
+                    } catch (error) {
+                      console.error('[CHAT PAGE] Error reloading messages:', error)
+                    }
+                  }, 500)
                   break
-                
-                case 'done':
-                  console.log('🏁 Processing complete:', event.data)
-                  break
-                
+
                 case 'error':
                   console.error('❌ Error:', event.data.error)
-                  throw new Error(event.data.error)
+                  setAssistantLoading(false)
+                  unsubscribe()
+                  break
               }
-            } catch (parseError) {
-              console.error('Failed to parse event:', parseError)
             }
-          }
-        }
-      }
-
-      console.log('✅ Stream complete - reloading messages...')
-
-      // Reload messages from database to get the saved assistant responses
-      const messagesResponse = await fetch(
-        `/api/chat/${currentActiveChat.id}/messages/list?companyId=${selectedCompany}&page=1&limit=100`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          })
+        },
+        (error) => {
+          console.error('[CHAT PAGE] Error listening to job updates:', error)
+          // Fallback to polling if real-time listener fails
+          console.log('[CHAT PAGE] Falling back to polling...')
+          startPollingFallback()
         }
       )
 
-      if (messagesResponse.ok) {
-        const data = await messagesResponse.json()
-        const { convertMessagesToItems, convertMessagesToConversationHistory } = await import('@/lib/chat/message-converter')
-        const items = convertMessagesToItems(data.messages)
-        const conversationHistory = convertMessagesToConversationHistory(data.messages)
-        
-        // Update both UI items and conversation history
-        const { setConversationItems } = useConversationStore.getState()
-        setChatMessages(items)
-        setConversationItems(conversationHistory)
-        console.log('✅ Messages reloaded from database - UI items:', items.length, 'Conversation items:', conversationHistory.length)
+      // Store the listener so we can clean it up when switching chats
+      activeListenersRef.current.push({ unsubscribe, chatId: currentActiveChat.id })
+
+      // Fallback polling function (in case real-time listener fails)
+      const startPollingFallback = () => {
+        let pollCount = 0
+        const maxPolls = 120
+        const pollInterval = setInterval(async () => {
+          pollCount++
+          
+          try {
+            const messagesResponse = await fetch(
+              `/api/chat/${currentActiveChat.id}/messages/list?companyId=${selectedCompany}&page=1&limit=100`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              }
+            )
+
+            if (messagesResponse.ok) {
+              const data = await messagesResponse.json()
+              const { convertMessagesToItems, convertMessagesToConversationHistory } = await import('@/lib/chat/message-converter')
+              const items = convertMessagesToItems(data.messages)
+              const conversationHistory = convertMessagesToConversationHistory(data.messages)
+
+              const { setConversationItems } = useConversationStore.getState()
+              setChatMessages(items)
+              setConversationItems(conversationHistory)
+
+              // Check if job is complete
+              if (conversationHistory.length > 0) {
+                const lastMessage = conversationHistory[conversationHistory.length - 1]
+                if (lastMessage.role === 'assistant' && pollCount > 3) {
+                  clearInterval(pollInterval)
+                  setAssistantLoading(false)
+                }
+              }
+            }
+          } catch (error) {
+            console.error('[CHAT PAGE] Error polling:', error)
+          }
+
+          if (pollCount >= maxPolls) {
+            clearInterval(pollInterval)
+            setAssistantLoading(false)
+          }
+        }, 1000)
       }
 
-      setAssistantLoading(false)
+      // Also set up a listener to check when job is completed
+      // This will stop the loading state and cleanup
+      const jobRef = doc(db, `Users/${userId}/knowledgebases/${selectedCompany}/chatJobs/${jobId}`)
+      const jobUnsubscribe = onSnapshot(jobRef, (jobDoc) => {
+        // Only process if this is still the active chat
+        const currentActiveChatId = useChatListStore.getState().activeChat?.id
+        if (currentActiveChat?.id !== currentActiveChatId) {
+          console.log(`[CHAT PAGE] Ignoring job completion - chat switched`)
+          jobUnsubscribe()
+          return
+        }
+
+        if (jobDoc.exists()) {
+          const jobData = jobDoc.data()
+          if (jobData.status === 'completed' || jobData.status === 'failed') {
+            console.log(`[CHAT PAGE] Job ${jobData.status}, cleaning up...`)
+            setAssistantLoading(false)
+            unsubscribe()
+            jobUnsubscribe()
+            
+            // Remove from active listeners
+            activeListenersRef.current = activeListenersRef.current.filter(l => l.chatId !== currentActiveChat.id)
+            
+            // Final reload of messages
+            setTimeout(async () => {
+              try {
+                const messagesResponse = await fetch(
+                  `/api/chat/${currentActiveChat.id}/messages/list?companyId=${selectedCompany}&page=1&limit=100`,
+                  {
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                    },
+                  }
+                )
+
+                if (messagesResponse.ok) {
+                  const data = await messagesResponse.json()
+                  const { convertMessagesToItems, convertMessagesToConversationHistory } = await import('@/lib/chat/message-converter')
+                  const items = convertMessagesToItems(data.messages)
+                  const conversationHistory = convertMessagesToConversationHistory(data.messages)
+
+                  const { setConversationItems } = useConversationStore.getState()
+                  setChatMessages(items)
+                  setConversationItems(conversationHistory)
+                }
+              } catch (error) {
+                console.error('[CHAT PAGE] Error in final reload:', error)
+              }
+            }, 1000)
+          }
+        }
+      })
+
       console.log('🏁 === SEND MESSAGE END ===')
     } catch (error) {
       console.error('❌ Error processing message:', error)

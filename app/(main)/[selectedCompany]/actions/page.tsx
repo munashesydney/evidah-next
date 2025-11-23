@@ -6,6 +6,7 @@ import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import Image from 'next/image';
 import ActionEventViewer from '@/components/actions/action-event-viewer';
+import DeleteConfirmationModal from '@/components/ui/delete-confirmation-modal';
 
 interface Action {
   id: string;
@@ -210,28 +211,52 @@ export default function ActionsPage() {
     }
   };
 
-  const handleDelete = async (actionId: string) => {
-    if (!uid || !confirm('Are you sure you want to delete this action?')) return;
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [actionToDelete, setActionToDelete] = useState<string | null>(null);
+  const [deletingActionId, setDeletingActionId] = useState<string | null>(null);
+
+  const handleDeleteClick = (e: React.MouseEvent, actionId: string) => {
+    e.stopPropagation();
+    setActionToDelete(actionId);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!uid || !actionToDelete) return;
 
     try {
+      setDeletingActionId(actionToDelete);
+      
       const response = await fetch('/api/actions', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           uid,
           selectedCompany,
-          actionId,
+          actionId: actionToDelete,
         }),
       });
 
       const data = await response.json();
 
       if (data.success) {
-        setActions(actions.filter((a) => a.id !== actionId));
+        setActions(actions.filter((a) => a.id !== actionToDelete));
+        setDeleteModalOpen(false);
+        setActionToDelete(null);
+      } else {
+        alert('Failed to delete action: ' + (data.error || 'Unknown error'));
       }
     } catch (error) {
       console.error('Error deleting action:', error);
+      alert('Failed to delete action. Please try again.');
+    } finally {
+      setDeletingActionId(null);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteModalOpen(false);
+    setActionToDelete(null);
   };
 
   const getEmployeeData = (employeeId: string) => {
@@ -357,21 +382,26 @@ export default function ActionsPage() {
                       </svg>
                     </button>
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(action.id);
-                      }}
-                      className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                      onClick={(e) => handleDeleteClick(e, action.id)}
+                      disabled={deletingActionId === action.id}
+                      className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Delete action"
                     >
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                        />
-                      </svg>
+                      {deletingActionId === action.id ? (
+                        <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -496,6 +526,17 @@ export default function ActionsPage() {
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Action"
+        message="Are you sure you want to delete this action? This will permanently remove the action and all its event history. This action cannot be undone."
+        confirmText="Delete Action"
+        isDeleting={deletingActionId === actionToDelete}
+      />
     </div>
   );
 }

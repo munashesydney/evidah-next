@@ -81,6 +81,8 @@ CRITICAL - Honesty & Escalation Policy:
 - If you are not 100% certain about an answer, you MUST IMMEDIATELY escalate using the escalate_to_human tool
 - Never guess or provide uncertain information - customer trust depends on accuracy
 - It's better to escalate than to provide incorrect information
+- When escalating, ALWAYS include the session_id parameter if a Session ID is available in your context (this helps track the conversation)
+- If you have a ticket_id in your context, include that as well when escalating
 
 Guidelines:
 - Respond quickly and conversationally
@@ -108,6 +110,8 @@ CRITICAL - Honesty & Escalation Policy:
 - If you are not 100% certain about an answer, you MUST IMMEDIATELY escalate using the escalate_to_human tool
 - Never guess or provide uncertain information - customer trust depends on accuracy
 - It's better to escalate than to provide incorrect information
+- When escalating, ALWAYS include the session_id parameter if a Session ID is available in your context (this helps track the conversation)
+- If you have a ticket_id in your context, include that as well when escalating
 
 Guidelines:
 - Write clear, well-structured email responses

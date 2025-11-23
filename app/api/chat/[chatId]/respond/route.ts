@@ -1,17 +1,18 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { MessageService } from '@/lib/services/message-service';
 import { ChatService } from '@/lib/services/chat-service';
+import { JobQueueService } from '@/lib/services/job-queue-service';
 import {
   requireAuth,
   createErrorResponse,
 } from '@/lib/middleware/auth-middleware';
-import { processEmployeeChat, EmployeeProcessorMessage } from '@/lib/chat/employee-processor';
+import { EmployeeProcessorMessage } from '@/lib/chat/employee-processor';
 import { ToolsState } from '@/stores/chat/useToolsStore';
 
 /**
  * POST /api/chat/[chatId]/respond
- * Process a user message and generate AI response with autonomous loop
- * All messages are saved server-side
+ * Enqueue a chat processing job for background processing
+ * The autonomous loop will continue even if the user closes their browser tab
  * 
  * Request body:
  * - message: string (required) - User message content
@@ -23,7 +24,7 @@ import { ToolsState } from '@/stores/chat/useToolsStore';
  * Headers:
  * - Authorization: Bearer <firebase-token>
  * 
- * Response: Server-Sent Events (SSE) stream
+ * Response: JSON with jobId and status
  */
 export async function POST(
   request: NextRequest,
@@ -67,7 +68,7 @@ export async function POST(
       );
     }
 
-    console.log(`[CHAT RESPOND] Processing message for chatId: ${chatId}, employeeId: ${employeeId}`);
+    console.log(`[CHAT RESPOND] Enqueueing job for chatId: ${chatId}, employeeId: ${employeeId}`);
     console.log(`[CHAT RESPOND] === RECEIVED CONVERSATION HISTORY ===`);
     console.log(`[CHAT RESPOND] Total messages in history: ${conversationHistory.length}`);
     conversationHistory.forEach((msg: any, index: number) => {
@@ -140,66 +141,57 @@ export async function POST(
       console.log(`[CHAT RESPOND]   [${index + 1}] ${msg.role.toUpperCase()}: ${msg.content.substring(0, 100)}${msg.content.length > 100 ? '...' : ''}`);
     });
 
-    // Create a ReadableStream for SSE
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          // Process the chat with streaming
-          const result = await processEmployeeChat(messages, {
-            chatId,
-            companyId,
-            uid: userId,
-            employeeId,
-            personalityLevel,
-            maxIterations: 10,
-            toolsState: toolsState as ToolsState | undefined,
-            onStream: (event) => {
-              // Send event to client
-              const data = JSON.stringify(event);
-              controller.enqueue(`data: ${data}\n\n`);
-            },
-          });
+    // Enqueue job for background processing
+    try {
+      const job = await JobQueueService.enqueue({
+        chatId,
+        companyId,
+        userId,
+        employeeId,
+        messages,
+        personalityLevel,
+        toolsState: toolsState as ToolsState | undefined,
+      });
 
-          // Send completion event
-          const completionData = JSON.stringify({
-            type: 'done',
-            data: {
-              success: result.success,
-              messagesSaved: result.messagesSaved,
-              error: result.error,
-            },
-          });
-          controller.enqueue(`data: ${completionData}\n\n`);
+      console.log(`[CHAT RESPOND] ✅ Job enqueued: ${job.id}`);
 
-          // Close the stream
-          controller.close();
+      // Trigger worker immediately for instant processing (fire-and-forget)
+      // The cron job will also run as a backup to catch any missed jobs
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+                     process.env.NEXT_PUBLIC_APP_URL || 
+                     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+      
+      const workerUrl = `${baseUrl}/api/workers/chat-processor`;
+      
+      // Fire and forget - don't wait for response
+      fetch(workerUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // Don't wait for response - process in background
+      }).catch((err) => {
+        // Silently fail - cron will pick it up as backup
+        console.warn(`[CHAT RESPOND] Failed to trigger worker immediately (cron will handle it):`, err.message);
+      });
 
-          console.log(`[CHAT RESPOND] ✅ Stream complete - ${result.messagesSaved} messages saved`);
-        } catch (error) {
-          console.error(`[CHAT RESPOND] ❌ Stream error:`, error);
+      console.log(`[CHAT RESPOND] 🚀 Worker triggered immediately for job: ${job.id}`);
 
-          // Send error event
-          const errorData = JSON.stringify({
-            type: 'error',
-            data: {
-              error: error instanceof Error ? error.message : 'Unknown error',
-            },
-          });
-          controller.enqueue(`data: ${errorData}\n\n`);
-
-          controller.close();
-        }
-      },
-    });
-
-    // Return SSE stream
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    });
+      return NextResponse.json({
+        jobId: job.id,
+        status: 'queued',
+        chatId,
+        message: 'Job enqueued and processing started',
+      });
+    } catch (error) {
+      console.error(`[CHAT RESPOND] ❌ Failed to enqueue job:`, error);
+      return createErrorResponse(
+        'INTERNAL_ERROR',
+        'Failed to enqueue job',
+        500,
+        error instanceof Error ? error.message : 'Unknown error'
+      );
+    }
   } catch (error: any) {
     console.error('[CHAT RESPOND] Error:', error);
 

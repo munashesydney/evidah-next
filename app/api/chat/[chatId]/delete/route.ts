@@ -1,75 +1,98 @@
-import { NextRequest } from 'next/server';
-import { ChatService } from '@/lib/services/chat-service';
-import {
-  requireAuth,
-  createErrorResponse,
-  createSuccessResponse,
-} from '@/lib/middleware/auth-middleware';
+import { NextRequest, NextResponse } from 'next/server';
+import { getFirestore } from 'firebase-admin/firestore';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+
+// Initialize Firebase Admin if not already initialized
+if (!getApps().length) {
+  initializeApp({
+    credential: cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    }),
+  });
+}
+
+const db = getFirestore();
 
 /**
  * DELETE /api/chat/[chatId]/delete
- * Delete a chat session and all its messages
- * 
- * URL parameters:
- * - chatId: string - The chat ID
- * 
- * Query parameters:
- * - companyId: string (required) - The company/knowledge base ID
- * 
- * Headers:
- * - Authorization: Bearer <firebase-token>
+ * Delete a chat and all its messages
  */
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ chatId: string }> }
 ) {
   try {
-    // Authenticate user
-    const authResult = await requireAuth(request);
-    if (authResult instanceof Response) {
-      return authResult; // Return 401 error
-    }
-    const { userId } = authResult;
-
-    // Get chatId from URL params
     const { chatId } = await params;
-
-    // Parse query parameters
     const { searchParams } = new URL(request.url);
+    const uid = searchParams.get('uid');
     const companyId = searchParams.get('companyId');
+    const employeeId = searchParams.get('employeeId');
 
-    // Validate required fields
-    if (!companyId) {
-      return createErrorResponse(
-        'INVALID_REQUEST',
-        'Missing required parameter: companyId',
-        400
+    if (!uid || !companyId || !employeeId || !chatId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Missing required parameters: uid, companyId, employeeId, chatId',
+        },
+        { status: 400 }
       );
     }
 
-    // Delete chat
-    await ChatService.deleteChat(userId, companyId, chatId);
+    console.log(`[DELETE CHAT] Deleting chat ${chatId} for ${uid}/${companyId}`);
 
-    return createSuccessResponse({
+    // Reference to the chat document
+    const chatRef = db
+      .collection('Users')
+      .doc(uid)
+      .collection('knowledgebases')
+      .doc(companyId)
+      .collection('aiChats')
+      .doc(chatId);
+
+    // Check if chat exists
+    const chatDoc = await chatRef.get();
+    if (!chatDoc.exists) {
+      return NextResponse.json(
+        { success: false, error: 'Chat not found' },
+        { status: 404 }
+      );
+    }
+
+    // Delete all messages in the chat
+    const messagesRef = chatRef.collection('messages');
+    const messagesSnapshot = await messagesRef.get();
+
+    if (!messagesSnapshot.empty) {
+      const batch = db.batch();
+      messagesSnapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+      await batch.commit();
+      console.log(`[DELETE CHAT] Deleted ${messagesSnapshot.size} message(s) from chat ${chatId}`);
+    }
+
+    // Delete the chat document itself
+    await chatRef.delete();
+    console.log(`[DELETE CHAT] Successfully deleted chat ${chatId}`);
+
+    return NextResponse.json({
+      success: true,
       message: 'Chat deleted successfully',
     });
   } catch (error: any) {
-    console.error('Error deleting chat:', error);
-
-    // Handle specific errors
-    if (error.message === 'Chat not found') {
-      return createErrorResponse(
-        'NOT_FOUND',
-        'Chat not found',
-        404
-      );
-    }
-
-    return createErrorResponse(
-      'INTERNAL_ERROR',
-      'Failed to delete chat',
-      500,
-      error.message
+    console.error('[DELETE CHAT] Error:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to delete chat',
+          details: error.message,
+        },
+      },
+      { status: 500 }
     );
   }
 }

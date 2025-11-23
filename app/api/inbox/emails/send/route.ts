@@ -231,6 +231,53 @@ export async function POST(request: NextRequest) {
     // Update ticket
     await updateTicket(ticketId, uid, selectedCompany, message);
 
+    // Clean up drafts and AI suggestions after successful send
+    try {
+      const db = admin.firestore();
+      
+      // Delete all drafts for this ticket
+      const draftsRef = db
+        .collection('Users')
+        .doc(uid)
+        .collection('knowledgebases')
+        .doc(selectedCompany)
+        .collection('Helpdesk')
+        .doc('default')
+        .collection('drafts');
+      
+      const draftsSnapshot = await draftsRef.where('ticketId', '==', ticketId).get();
+      
+      if (!draftsSnapshot.empty) {
+        const batch = db.batch();
+        draftsSnapshot.docs.forEach((doc) => {
+          batch.delete(doc.ref);
+        });
+        await batch.commit();
+        console.log(`Deleted ${draftsSnapshot.size} draft(s) for ticket ${ticketId}`);
+      }
+      
+      // Remove AI suggestion fields from ticket
+      const ticketRef = db
+        .collection('Users')
+        .doc(uid)
+        .collection('knowledgebases')
+        .doc(selectedCompany)
+        .collection('Helpdesk')
+        .doc('default')
+        .collection('tickets')
+        .doc(ticketId);
+      
+      await ticketRef.update({
+        lastAISuggestion: admin.firestore.FieldValue.delete(),
+        lastAISuggestionTimestamp: admin.firestore.FieldValue.delete(),
+      });
+      
+      console.log(`Cleared AI suggestion fields for ticket ${ticketId}`);
+    } catch (cleanupError) {
+      // Log but don't fail the request if cleanup fails
+      console.error('Error cleaning up drafts/AI suggestions:', cleanupError);
+    }
+
     return NextResponse.json({
       status: 1,
       message: 'Email sent successfully',

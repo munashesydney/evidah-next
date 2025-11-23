@@ -1780,12 +1780,16 @@ export const escalate_to_human = async ({
   reason,
   urgency,
   summary,
+  ticket_id,
+  session_id,
 }: {
   uid: string;
   selectedCompany: string;
   reason: string;
   urgency: 'low' | 'medium' | 'high';
   summary?: string;
+  ticket_id?: string;
+  session_id?: string;
 }) => {
   // Import the handler from public-assistant tools
   const { executePublicAssistantTool } = await import('@/lib/public-assistant/tools');
@@ -1796,6 +1800,8 @@ export const escalate_to_human = async ({
     reason,
     urgency,
     summary,
+    ticket_id,
+    session_id,
   });
 
   return result;
@@ -1844,6 +1850,99 @@ export const save_answered_question = async ({
   return res;
 };
 
+/**
+ * Draft functions (Charlie's functions)
+ */
+
+/**
+ * Get AI-generated drafts for tickets
+ */
+export const get_drafts = async ({
+  uid,
+  selectedCompany,
+  limit,
+  lastDocId,
+}: {
+  uid: string;
+  selectedCompany: string;
+  limit?: number;
+  lastDocId?: string;
+}) => {
+  const params = new URLSearchParams({
+    uid,
+    selectedCompany,
+  });
+  
+  if (limit !== undefined) {
+    params.append('limit', limit.toString());
+  }
+  
+  if (lastDocId) {
+    params.append('lastDocId', lastDocId);
+  }
+
+  const res = await fetch(`/api/inbox/drafts?${params.toString()}`).then((res) => res.json());
+
+  return res;
+};
+
+/**
+ * Create a new draft for a ticket
+ */
+export const create_draft = async ({
+  uid,
+  selectedCompany,
+  ticketId,
+  aiResponse,
+}: {
+  uid: string;
+  selectedCompany: string;
+  ticketId: string;
+  aiResponse: string;
+}) => {
+  const res = await fetch(`/api/inbox/drafts`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      uid,
+      selectedCompany,
+      ticketId,
+      aiResponse,
+    }),
+  }).then((res) => res.json());
+
+  return res;
+};
+
+/**
+ * Delete a draft
+ */
+export const delete_draft = async ({
+  uid,
+  selectedCompany,
+  draftId,
+}: {
+  uid: string;
+  selectedCompany: string;
+  draftId: string;
+}) => {
+  const res = await fetch(`/api/inbox/drafts`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      uid,
+      selectedCompany,
+      draftId,
+    }),
+  }).then((res) => res.json());
+
+  return res;
+};
+
 export const functionsMap = {
   get_weather: get_weather,
   get_joke: get_joke,
@@ -1868,6 +1967,9 @@ export const functionsMap = {
   update_helpdesk_settings: update_helpdesk_settings,
   update_helpdesk_ai_suggestions: update_helpdesk_ai_suggestions,
   update_helpdesk_ai_messages: update_helpdesk_ai_messages,
+  get_drafts: get_drafts,
+  create_draft: create_draft,
+  delete_draft: delete_draft,
   get_live_chat_sessions: get_live_chat_sessions,
   get_live_chat_session: get_live_chat_session,
   get_live_chat_settings: get_live_chat_settings,

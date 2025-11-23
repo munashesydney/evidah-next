@@ -1,0 +1,15 @@
+{
+  "crons": [
+    {
+      "path": "/api/workers/chat-processor",
+      "schedule": "*/10 * * * * *"
+    }
+  ],
+  "functions": {
+    "app/api/workers/chat-processor/route.ts": {
+      "maxDuration": 900,
+      "memory": 1024
+    }
+  }
+}
+

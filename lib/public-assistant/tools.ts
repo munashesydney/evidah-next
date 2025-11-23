@@ -21,6 +21,14 @@ export const publicAssistantTools = [
         type: "string",
         description: "Brief summary of the customer's issue or question for the human agent (optional)",
       },
+      ticket_id: {
+        type: "string",
+        description: "Ticket ID if this escalation is related to a support ticket (optional)",
+      },
+      session_id: {
+        type: "string",
+        description: "Session ID if this escalation is from a live chat session (optional)",
+      },
     },
   },
 ];
@@ -55,14 +63,35 @@ async function handleEscalateToHuman(args: Record<string, any>): Promise<{ succe
   const reason = args.reason as string;
   const urgency = (args.urgency as "low" | "medium" | "high") || "medium";
   const summary = args.summary as string | undefined;
+  const ticketId = args.ticket_id as string | undefined;
+  const sessionId = args.session_id as string | undefined;
   const uid = args.uid as string;
   const companyId = args.companyId as string;
   const conversationContext = args.conversationContext as string | undefined;
+
+  // Build enhanced summary with ticket_id and session_id if available
+  let enhancedSummary = summary || '';
+  if (ticketId || sessionId) {
+    const additionalInfo: string[] = [];
+    if (ticketId) {
+      additionalInfo.push(`Ticket ID: ${ticketId}`);
+    }
+    if (sessionId) {
+      additionalInfo.push(`Session ID: ${sessionId}`);
+    }
+    if (enhancedSummary) {
+      enhancedSummary += `\n\n**Reference Information:**\n${additionalInfo.join('\n')}`;
+    } else {
+      enhancedSummary = `**Reference Information:**\n${additionalInfo.join('\n')}`;
+    }
+  }
 
   console.log("[ESCALATION] Customer conversation escalated to human agent", {
     reason,
     urgency,
     summary,
+    ticket_id: ticketId,
+    session_id: sessionId,
     timestamp: new Date().toISOString(),
   });
 
@@ -89,7 +118,7 @@ async function handleEscalateToHuman(args: Record<string, any>): Promise<{ succe
         escalation: true,
         reason,
         urgency,
-        summary,
+        summary: enhancedSummary,
         createdAt: new Date().toISOString(),
       },
     });
@@ -111,7 +140,7 @@ async function handleEscalateToHuman(args: Record<string, any>): Promise<{ succe
 
 **Urgency:** ${urgency.toUpperCase()}
 
-${summary ? `**Summary:** ${summary}\n\n` : ''}${conversationContext ? `**Conversation Context:**\n${conversationContext}\n\n` : ''}Could you please provide guidance on how I should respond to this?`;
+${enhancedSummary ? `**Summary:**\n${enhancedSummary}\n\n` : ''}${conversationContext ? `**Conversation Context:**\n${conversationContext}\n\n` : ''}Could you please provide guidance on how I should respond to this?`;
 
     await MessageService.createMessage(uid, companyId, chatId, {
       content: questionMessage,
@@ -137,7 +166,7 @@ ${summary ? `**Summary:** ${summary}\n\n` : ''}${conversationContext ? `**Conver
           chatId,
           reason,
           urgency,
-          summary,
+          summary: enhancedSummary,
         }),
       });
 
@@ -162,7 +191,7 @@ ${summary ? `**Summary:** ${summary}\n\n` : ''}${conversationContext ? `**Conver
         chatId,
         reason,
         urgency,
-        summary,
+        summary: enhancedSummary,
         timestamp: new Date().toISOString(),
       },
     };

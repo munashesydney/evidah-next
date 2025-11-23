@@ -99,6 +99,7 @@ interface Ticket {
   status: string
   closed?: boolean
   aiOn?: boolean
+  isSpam?: boolean
 }
 
 interface Message {
@@ -111,6 +112,7 @@ interface Message {
   type?: string
   open: boolean
   attachments?: Array<{ fileName: string; publicUrl: string }>
+  isSpam?: boolean
 }
 
 interface TicketData {
@@ -120,6 +122,7 @@ interface TicketData {
   status: string
   closed?: boolean
   aiOn?: boolean
+  isSpam?: boolean
   [key: string]: any
 }
 
@@ -168,6 +171,11 @@ function MessageCard({
                 {isAI && (
                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
                     AI Response
+                  </span>
+                )}
+                {message.isSpam && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+                    SPAM
                   </span>
                 )}
               </div>
@@ -871,10 +879,15 @@ export default function InboxPage() {
                           </div>
                           <div className="grow truncate">
                             <div className="flex items-center justify-between mb-1.5">
-                              <div className="truncate">
+                              <div className="truncate flex items-center gap-2">
                                 <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
                                   Re: {item.subject}
                                 </span>
+                                {item.isSpam && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+                                    SPAM
+                                  </span>
+                                )}
                               </div>
                               <div className="text-xs text-gray-500 font-medium flex items-center gap-1">
                                 {formatTimestampToDayMonth(item.lastMessageDate || item.date)}
@@ -993,9 +1006,16 @@ export default function InboxPage() {
                 {/* Center - Ticket info */}
                 <div className="hidden md:flex items-center justify-center flex-1">
                   <div className="flex flex-col items-center">
-                    <h2 className="text-sm font-medium text-gray-800 dark:text-gray-200">
-                      {ticketData?.subject || 'Ticket Details'}
-                    </h2>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                        {ticketData?.subject || 'Ticket Details'}
+                      </h2>
+                      {ticketData?.isSpam && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+                          SPAM
+                        </span>
+                      )}
+                    </div>
                     {ticketData?.from && (
                       <span className="text-xs text-gray-500 dark:text-gray-400">
                         From: {ticketData.from.split('@')[0]}

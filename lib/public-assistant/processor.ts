@@ -155,11 +155,14 @@ export async function processEmployeeResponse(
           ? JSON.parse(item.arguments) 
           : item.arguments;
         
-        // Inject uid and companyId for internal tool calls
+        // Inject uid, companyId, and context (sessionId, ticketId) for internal tool calls
         const argsWithContext = {
           ...args,
           uid,
           companyId,
+          // Include sessionId and ticketId from context if available
+          ...(context?.sessionId && { session_id: context.sessionId }),
+          ...(context?.ticketId && { ticket_id: context.ticketId }),
         };
         
         const result = await executePublicAssistantTool(item.name, argsWithContext);

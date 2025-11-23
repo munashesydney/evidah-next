@@ -6,6 +6,7 @@ import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import Image from 'next/image';
 import { ExclamationTriangleIcon, ExclamationCircleIcon, ChatBubbleLeftEllipsisIcon, QuestionMarkCircleIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
+import DeleteConfirmationModal from '@/components/ui/delete-confirmation-modal';
 
 interface QuestionChat {
   id: string;
@@ -33,6 +34,9 @@ export default function QuestionsPage() {
   const [questions, setQuestions] = useState<QuestionChat[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'all' | 'answered' | 'unanswered'>('unanswered');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [questionToDelete, setQuestionToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -77,6 +81,48 @@ export default function QuestionsPage() {
 
   const handleQuestionClick = (chatId: string) => {
     router.push(`/${selectedCompany}/chat/sung-wen?chatId=${chatId}`);
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, chatId: string) => {
+    e.stopPropagation(); // Prevent triggering the card click
+    setQuestionToDelete(chatId);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!uid || !questionToDelete) return;
+
+    try {
+      setDeletingId(questionToDelete);
+      
+      const response = await fetch(
+        `/api/chat/${questionToDelete}/delete?uid=${uid}&companyId=${selectedCompany}&employeeId=sung-wen`,
+        {
+          method: 'DELETE',
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Remove the question from the list
+        setQuestions((prev) => prev.filter((q) => q.id !== questionToDelete));
+        setDeleteModalOpen(false);
+        setQuestionToDelete(null);
+      } else {
+        alert('Failed to delete question: ' + (data.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error deleting question:', error);
+      alert('Failed to delete question. Please try again.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteModalOpen(false);
+    setQuestionToDelete(null);
   };
 
   const getUrgencyColor = (urgency?: string) => {
@@ -242,11 +288,13 @@ export default function QuestionsPage() {
             return (
             <div
               key={question.id}
-              onClick={() => handleQuestionClick(question.id)}
-              className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-all cursor-pointer"
+              className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-all relative group"
             >
               <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
+                <div 
+                  className="flex-1 min-w-0 cursor-pointer"
+                  onClick={() => handleQuestionClick(question.id)}
+                >
                   {/* Header */}
                   <div className="flex items-center space-x-2 mb-3">
                     <span className="flex items-center justify-center w-8 h-8">
@@ -289,9 +337,34 @@ export default function QuestionsPage() {
                   )}
                 </div>
 
-                {/* Arrow */}
-                <div className="ml-4 flex-shrink-0">
-                  <ArrowRightIcon className="w-6 h-6 text-gray-400" />
+                {/* Actions */}
+                <div className="ml-4 flex-shrink-0 flex items-center space-x-2">
+                  {/* Delete Button */}
+                  <button
+                    onClick={(e) => handleDeleteClick(e, question.id)}
+                    disabled={deletingId === question.id}
+                    className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Delete question"
+                  >
+                    {deletingId === question.id ? (
+                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    )}
+                  </button>
+                  
+                  {/* Arrow */}
+                  <div 
+                    className="cursor-pointer p-2"
+                    onClick={() => handleQuestionClick(question.id)}
+                  >
+                    <ArrowRightIcon className="w-6 h-6 text-gray-400" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -328,6 +401,17 @@ export default function QuestionsPage() {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Question"
+        message="Are you sure you want to delete this question? This will permanently delete the entire conversation and cannot be undone."
+        confirmText="Delete Question"
+        isDeleting={deletingId === questionToDelete}
+      />
     </div>
   );
 }

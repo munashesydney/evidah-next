@@ -465,6 +465,44 @@ const employeeSpecificTools = {
         },
       },
     },
+    {
+      name: "get_drafts",
+      description: "Retrieve AI-generated draft responses for tickets. Use this to view all draft suggestions with pagination.",
+      parameters: {
+        limit: {
+          type: "number",
+          description: "Number of drafts to retrieve (optional, default is 20)",
+        },
+        lastDocId: {
+          type: "string",
+          description: "Last document ID for pagination (optional, used to get next page of results)",
+        },
+      },
+    },
+    {
+      name: "create_draft",
+      description: "Create a new AI-generated draft response for a ticket. Use this to save an AI suggestion that can be reviewed and used later.",
+      parameters: {
+        ticketId: {
+          type: "string",
+          description: "The ID of the ticket this draft is for",
+        },
+        aiResponse: {
+          type: "string",
+          description: "The AI-generated response text to save as a draft (NO SUBJECT - JUST BODY)",
+        },
+      },
+    },
+    {
+      name: "delete_draft",
+      description: "Delete a draft response. Use this to remove a draft that is no longer needed.",
+      parameters: {
+        draftId: {
+          type: "string",
+          description: "The ID of the draft to delete",
+        },
+      },
+    },
   ],
   marquavious: [
     {

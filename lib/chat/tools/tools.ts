@@ -97,6 +97,9 @@ export const getTools = async (
           'update_helpdesk_settings': [], // All params optional (uid/selectedCompany injected)
           'update_helpdesk_ai_suggestions': ['aiSuggestionsOn'],
           'update_helpdesk_ai_messages': ['aiMessagesOn'],
+          'get_drafts': [], // All params optional (uid/selectedCompany injected)
+          'create_draft': ['ticketId', 'aiResponse'],
+          'delete_draft': ['draftId'],
           'get_live_chat_sessions': [], // All params optional (uid/selectedCompany injected)
           'get_live_chat_session': ['sessionId'],
           'get_live_chat_settings': [], // All params optional (uid/selectedCompany injected)
