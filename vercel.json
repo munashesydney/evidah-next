@@ -7,8 +7,7 @@
   ],
   "functions": {
     "app/api/workers/chat-processor/route.ts": {
-      "maxDuration": 800,
-      "memory": 1024
+      "maxDuration": 800
     }
   }
 }

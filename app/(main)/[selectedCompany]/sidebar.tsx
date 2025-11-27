@@ -499,7 +499,8 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
                 (pathname === `/${selectedCompany}/training` || 
                  pathname?.includes('/training/documents') || 
                  pathname?.includes('/training/rules') || 
-                 pathname?.includes('/training/faq'))
+                 pathname?.includes('/training/faq') ||
+                 pathname?.includes('/training/scenarios'))
               }>
                 {(handleClick, open) => {
                   const isActive = 
@@ -507,7 +508,8 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
                     (pathname === `/${selectedCompany}/training` || 
                      pathname?.includes('/training/documents') || 
                      pathname?.includes('/training/rules') || 
-                     pathname?.includes('/training/faq'));
+                     pathname?.includes('/training/faq') ||
+                     pathname?.includes('/training/scenarios'));
                   return (
                     <>
                       <a
@@ -556,6 +558,20 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
                       </a>
                       <div className="lg:hidden lg:sidebar-expanded:block 2xl:block">
                         <ul className={`pl-8 mt-1 ${!open && 'hidden'}`}>
+                          <li className="mb-1 last:mb-0">
+                            <Link
+                              href={`/${selectedCompany}/training/scenarios`}
+                              className={`block transition duration-150 truncate ${
+                                pathname?.includes('/training/scenarios')
+                                  ? 'text-violet-500'
+                                  : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                              }`}
+                            >
+                              <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                Scenarios
+                              </span>
+                            </Link>
+                          </li>
                           <li className="mb-1 last:mb-0">
                             <Link
                               href={`/${selectedCompany}/training`}
@@ -612,6 +628,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
                               </span>
                             </Link>
                           </li>
+                          
                         </ul>
                       </div>
                     </>

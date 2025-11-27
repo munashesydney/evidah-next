@@ -76,22 +76,27 @@ export async function PUT(request: NextRequest) {
 
     if (name !== undefined) {
       updateData.name = name.trim();
+      updateData.nameLower = name.trim().toLowerCase();
     }
 
     if (description !== undefined) {
       updateData.description = description?.trim() || '';
+      updateData.descriptionLower = (description?.trim() || '').toLowerCase();
     }
 
     if (condition !== undefined) {
       updateData.condition = condition.trim();
+      updateData.conditionLower = condition.trim().toLowerCase();
     }
 
     if (thenAction !== undefined) {
       updateData.thenAction = thenAction.trim();
+      updateData.thenActionLower = thenAction.trim().toLowerCase();
     }
 
     if (elseAction !== undefined) {
       updateData.elseAction = elseAction?.trim() || null;
+      updateData.elseActionLower = elseAction?.trim()?.toLowerCase() || null;
     }
 
     if (enabled !== undefined) {

@@ -66,10 +66,15 @@ export async function POST(request: NextRequest) {
 
     const scenarioData = {
       name: name.trim(),
+      nameLower: name.trim().toLowerCase(),
       description: description?.trim() || '',
+      descriptionLower: (description?.trim() || '').toLowerCase(),
       condition: condition.trim(),
+      conditionLower: condition.trim().toLowerCase(),
       thenAction: thenAction.trim(),
+      thenActionLower: thenAction.trim().toLowerCase(),
       elseAction: elseAction?.trim() || null,
+      elseActionLower: elseAction?.trim()?.toLowerCase() || null,
       enabled: enabled !== false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

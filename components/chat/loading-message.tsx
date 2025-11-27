@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 
 interface Employee {
   id: string
@@ -28,7 +28,42 @@ interface LoadingMessageProps {
   employee?: Employee;
 }
 
+// Fun thinking words that rotate
+const THINKING_WORDS = [
+  'Thinking',
+  'Processing',
+  'Analyzing',
+  'Computing',
+  'Pondering',
+  'Crafting',
+  'Cooking',
+  'Brewing',
+  'Generating',
+  'Composing',
+  'Formulating',
+  'Calculating',
+  'Synthesizing',
+  'Contemplating',
+  'Deliberating',
+  'Reasoning',
+  'Evaluating',
+  'Assembling',
+  'Constructing',
+  'Preparing',
+];
+
 const LoadingMessage: React.FC<LoadingMessageProps> = ({ employee = defaultEmployee }) => {
+  const [currentWord, setCurrentWord] = useState(THINKING_WORDS[0]);
+
+  // Rotate through thinking words
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentWord(THINKING_WORDS[Math.floor(Math.random() * THINKING_WORDS.length)]);
+    }, 2000); // Change word every 2 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
   // Get spinner color based on employee
   const getSpinnerColor = () => {
     const id = employee.id
@@ -48,11 +83,6 @@ const LoadingMessage: React.FC<LoadingMessageProps> = ({ employee = defaultEmplo
 
   return (
     <div className="flex items-start mb-6">
-      {/* Bot Avatar */}
-      <div className={`w-10 h-10 rounded-full bg-gradient-to-r ${employee.theme.gradient} flex items-center justify-center text-white font-bold mr-3 shrink-0 shadow-lg`}>
-        {employee.name.charAt(0)}
-      </div>
-      
       {/* Loading indicator - Chat bubble with shimmer */}
       <div className="relative overflow-hidden bg-gray-100 dark:bg-gray-800 px-4 py-3 rounded-2xl rounded-tl-md shadow-sm">
         {/* Shimmer effect on entire card */}
@@ -64,8 +94,10 @@ const LoadingMessage: React.FC<LoadingMessageProps> = ({ employee = defaultEmplo
         <div className="flex items-center gap-2.5 relative z-10">
           {/* Circular spinner */}
           <div className={`w-4 h-4 border-2 ${getSpinnerColor()} border-t-transparent rounded-full animate-spin`}></div>
-          {/* Thinking text */}
-          <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">Thinking</span>
+          {/* Dynamic thinking text with fade transition */}
+          <span className="text-sm text-gray-600 dark:text-gray-400 font-medium transition-opacity duration-300 min-w-[100px]">
+            {currentWord}
+          </span>
         </div>
       </div>
     </div>

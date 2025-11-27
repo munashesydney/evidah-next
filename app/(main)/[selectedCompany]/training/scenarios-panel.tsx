@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -38,6 +38,8 @@ export default function ScenariosPanel() {
   const [success, setSuccess] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingScenario, setEditingScenario] = useState<Scenario | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -50,18 +52,13 @@ export default function ScenariosPanel() {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    if (uid) {
-      fetchScenarios();
-    }
-  }, [uid, selectedCompany, currentPage]);
-
-  const fetchScenarios = async () => {
+  const fetchScenarios = useCallback(async () => {
     if (!uid) return;
 
     try {
       setLoading(true);
       setError('');
+      setIsSearching(false);
 
       const response = await fetch(
         `/api/scenarios/list?uid=${uid}&selectedCompany=${selectedCompany || 'default'}&page=${currentPage}&limit=20`
@@ -81,28 +78,110 @@ export default function ScenariosPanel() {
     } finally {
       setLoading(false);
     }
+  }, [uid, selectedCompany, currentPage]);
+
+  const searchScenarios = useCallback(async () => {
+    if (!uid || !searchQuery.trim()) return;
+
+    try {
+      setLoading(true);
+      setError('');
+      setIsSearching(true);
+
+      const response = await fetch(
+        `/api/scenarios/search?uid=${uid}&selectedCompany=${selectedCompany || 'default'}&q=${encodeURIComponent(searchQuery.trim())}&page=${currentPage}&limit=20`
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        setScenarios(data.scenarios || []);
+        setPagination(data.pagination || null);
+      } else {
+        setError(data.error?.message || 'Failed to search scenarios');
+      }
+    } catch (error: any) {
+      console.error('Error searching scenarios:', error);
+      setError('Failed to search scenarios');
+    } finally {
+      setLoading(false);
+    }
+  }, [uid, selectedCompany, currentPage, searchQuery]);
+
+  useEffect(() => {
+    if (uid) {
+      if (searchQuery.trim()) {
+        searchScenarios();
+      } else {
+        fetchScenarios();
+      }
+    }
+  }, [uid, selectedCompany, currentPage, searchQuery, fetchScenarios, searchScenarios]);
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setCurrentPage(1); // Reset to first page on new search
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setCurrentPage(1);
   };
 
   return (
     <div className="grow">
       <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h2 className="text-2xl text-gray-800 dark:text-gray-100 font-bold">Chat Scenarios</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Create conditional logic to automate responses based on user messages
-            </p>
+        <div className="mb-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-2xl text-gray-800 dark:text-gray-100 font-bold">Chat Scenarios</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Create conditional logic to automate responses based on user messages
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="btn bg-gray-900 text-gray-100 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-800 dark:hover:bg-white"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Scenario
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowAddModal(true)}
-            className="btn bg-gray-900 text-gray-100 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-800 dark:hover:bg-white"
-          >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Scenario
-          </button>
+
+          {/* Search Bar */}
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <input
+              type="text"
+              className="form-input w-full pl-10 pr-10"
+              placeholder="Search scenarios by name, description, condition, or action..."
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+          {isSearching && searchQuery && (
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+              Searching for "{searchQuery}"...
+            </p>
+          )}
         </div>
 
         {error && (
@@ -185,17 +264,35 @@ export default function ScenariosPanel() {
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
               />
             </svg>
-            <p className="text-gray-500 dark:text-gray-400 mb-2">No scenarios yet</p>
-            <p className="text-sm text-gray-400 dark:text-gray-500 mb-4">
-              Create your first scenario to automate chat responses
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowAddModal(true)}
-              className="btn bg-gray-900 text-gray-100 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-800 dark:hover:bg-white"
-            >
-              Add Scenario
-            </button>
+            {isSearching ? (
+              <>
+                <p className="text-gray-500 dark:text-gray-400 mb-2">No scenarios found</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500 mb-4">
+                  Try a different search term or clear the search to see all scenarios
+                </p>
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  className="btn border-gray-200 dark:border-gray-700/60 hover:border-gray-300 dark:hover:border-gray-600 text-gray-800 dark:text-gray-300"
+                >
+                  Clear Search
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-gray-500 dark:text-gray-400 mb-2">No scenarios yet</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500 mb-4">
+                  Create your first scenario to automate chat responses
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(true)}
+                  className="btn bg-gray-900 text-gray-100 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-800 dark:hover:bg-white"
+                >
+                  Add Scenario
+                </button>
+              </>
+            )}
           </div>
         )}
 
