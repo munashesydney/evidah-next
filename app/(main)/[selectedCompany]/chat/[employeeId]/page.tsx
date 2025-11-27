@@ -78,6 +78,265 @@ export default function ChatPage() {
     }
   }, [employeeId])
 
+  // Reconnect to job streaming when switching back to a chat with an active job
+  const reconnectToJobStreaming = async (chatId: string, jobId: string, token: string) => {
+    if (!userId || !selectedCompany) return
+
+    console.log(`[CHAT PAGE] 🔄 Reconnecting to job streaming: ${jobId}`)
+
+    const { addChatMessage, setChatMessages, setAssistantLoading } = useConversationStore.getState()
+
+    // Set up real-time listener for job streaming updates
+    const updatesRef = collection(
+      db,
+      `Users/${userId}/knowledgebases/${selectedCompany}/chatJobs/${jobId}/updates`
+    )
+    const updatesQuery = query(updatesRef, orderBy('timestamp', 'asc'))
+
+    // Track streaming state
+    let streamingMessageId: string | null = null
+    let streamingAssistantText = ''
+    const processedUpdateIds = new Set<string>()
+
+    // Helpers for streaming assistant message into the UI
+    const ensureStreamingMessage = () => {
+      if (streamingMessageId) return
+      streamingMessageId = `stream-${Date.now()}`
+      addChatMessage({
+        type: 'message',
+        role: 'assistant',
+        id: streamingMessageId,
+        content: [
+          {
+            type: 'output_text',
+            text: '',
+          },
+        ],
+      })
+    }
+
+    const updateStreamingMessage = (text: string) => {
+      if (!streamingMessageId) return
+      const { chatMessages } = useConversationStore.getState()
+      const updated: Item[] = chatMessages.map((item: Item) => {
+        if (item.id === streamingMessageId && item.type === 'message') {
+          const existingContent = item.content?.[0]
+          const contentItem: ContentItem =
+            existingContent && existingContent.type === 'output_text'
+              ? existingContent
+              : { type: 'output_text' as const, text: '' }
+          const updatedItem: MessageItem = {
+            ...item,
+            content: [
+              {
+                ...contentItem,
+                type: 'output_text' as const,
+                text,
+              },
+            ],
+          }
+          return updatedItem
+        }
+        return item
+      })
+      setChatMessages(updated)
+    }
+
+    const handleToolCallStart = (data: any) => {
+      if (!data?.id) return
+      const store = useConversationStore.getState()
+      const { chatMessages, addChatMessage } = store
+      const setMessages = store.setChatMessages
+      const toolType =
+        (data.toolType as ToolCallItem['tool_type']) ||
+        (data.name === 'file_search'
+          ? 'file_search_call'
+          : data.name === 'web_search'
+            ? 'web_search_call'
+            : 'function_call')
+
+      const existing = chatMessages.find(item => item.type === 'tool_call' && item.id === data.id) as ToolCallItem | undefined
+      if (existing) {
+        const updated: Item[] = chatMessages.map(item => {
+          if (item.type === 'tool_call' && item.id === data.id) {
+            const updatedItem: ToolCallItem = {
+              ...item,
+              status: 'in_progress' as const,
+              name: data.name ?? item.name,
+              arguments:
+                typeof data.arguments === 'string'
+                  ? data.arguments
+                  : data.arguments
+                    ? JSON.stringify(data.arguments)
+                    : item.arguments,
+            }
+            return updatedItem
+          }
+          return item
+        })
+        setMessages(updated)
+        return
+      }
+
+      const serializedArgs =
+        typeof data.arguments === 'string'
+          ? data.arguments
+          : data.arguments
+            ? JSON.stringify(data.arguments)
+            : undefined
+
+      addChatMessage({
+        type: 'tool_call',
+        tool_type: toolType,
+        status: 'in_progress',
+        id: data.id,
+        name: data.name ?? null,
+        arguments: serializedArgs,
+        output: null,
+      })
+    }
+
+    const handleToolCallComplete = (data: any) => {
+      if (!data?.id) return
+      const store = useConversationStore.getState()
+      const { chatMessages } = store
+      const setMessages = store.setChatMessages
+      let changed = false
+      const updated: Item[] = chatMessages.map(item => {
+        if (item.type === 'tool_call' && item.id === data.id) {
+          changed = true
+          const updatedItem: ToolCallItem = {
+            ...item,
+            status: 'completed' as const,
+            output: data.result ? JSON.stringify(data.result) : item.output,
+          }
+          return updatedItem
+        }
+        return item
+      })
+      if (changed) {
+        setMessages(updated)
+      }
+    }
+
+    // Listen to real-time updates from the job
+    const unsubscribe = onSnapshot(
+      updatesQuery,
+      async (snapshot) => {
+        // Only process updates if this is still the active chat
+        const currentActiveChatId = useChatListStore.getState().activeChat?.id
+        if (chatId !== currentActiveChatId) {
+          console.log(`[CHAT PAGE] Ignoring update - chat switched`)
+          return
+        }
+
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const updateId = change.doc.id
+            if (processedUpdateIds.has(updateId)) return
+            processedUpdateIds.add(updateId)
+
+            const updateData = change.doc.data()
+            const event = {
+              type: updateData.type,
+              data: updateData.data,
+            }
+
+            console.log(`[CHAT PAGE] 📡 Received streaming update: ${event.type}`)
+
+            switch (event.type) {
+              case 'message_delta':
+                {
+                  const deltaText = event.data?.delta || event.data?.textDelta || ''
+                  const cumulativeText = event.data?.text || (streamingAssistantText + deltaText)
+                  if (cumulativeText) {
+                    ensureStreamingMessage()
+                    streamingAssistantText = cumulativeText
+                    updateStreamingMessage(streamingAssistantText)
+                  }
+                }
+                break
+
+              case 'tool_call_start':
+                console.log('🔧 Tool call started:', event.data.name)
+                handleToolCallStart(event.data)
+                break
+
+              case 'tool_call_complete':
+                console.log('✅ Tool call completed:', event.data.name)
+                handleToolCallComplete(event.data)
+                break
+
+              case 'assistant_message_saved':
+                console.log('💾 Message saved:', event.data.messageNumber)
+                // Reload messages from database to get the final saved message
+                setTimeout(async () => {
+                  try {
+                    const messagesResponse = await fetch(
+                      `/api/chat/${chatId}/messages/list?companyId=${selectedCompany}&page=1&limit=100`,
+                      {
+                        headers: {
+                          Authorization: `Bearer ${token}`,
+                        },
+                      }
+                    )
+
+                    if (messagesResponse.ok) {
+                      const data = await messagesResponse.json()
+                      const { convertMessagesToItems, convertMessagesToConversationHistory } = await import('@/lib/chat/message-converter')
+                      const items = convertMessagesToItems(data.messages)
+                      const conversationHistory = convertMessagesToConversationHistory(data.messages)
+
+                      const { setConversationItems } = useConversationStore.getState()
+                      setChatMessages(items)
+                      setConversationItems(conversationHistory)
+                      streamingMessageId = null
+                      streamingAssistantText = ''
+                    }
+                  } catch (error) {
+                    console.error('[CHAT PAGE] Error reloading messages:', error)
+                  }
+                }, 500)
+                break
+
+              case 'error':
+                console.error('❌ Error:', event.data.error)
+                setAssistantLoading(false)
+                unsubscribe()
+                break
+            }
+          }
+        })
+      },
+      (error) => {
+        console.error('[CHAT PAGE] Error listening to job updates:', error)
+        setAssistantLoading(false)
+      }
+    )
+
+    // Store the listener so we can clean it up when switching chats
+    activeListenersRef.current.push({ unsubscribe, chatId })
+
+    // Also set up a listener to check when job is completed
+    const jobRef = doc(db, `Users/${userId}/knowledgebases/${selectedCompany}/chatJobs/${jobId}`)
+    const jobUnsubscribe = onSnapshot(jobRef, (jobDoc) => {
+      const currentActiveChatId = useChatListStore.getState().activeChat?.id
+      if (chatId !== currentActiveChatId) {
+        return
+      }
+
+      if (jobDoc.exists()) {
+        const jobData = jobDoc.data()
+        if (jobData.status === 'completed' || jobData.status === 'failed') {
+          console.log(`[CHAT PAGE] Job ${jobId} ${jobData.status}`)
+          setAssistantLoading(false)
+          unsubscribe()
+          jobUnsubscribe()
+        }
+      }
+    })
+  }
+
   // Load chats for this employee
   useEffect(() => {
     const loadChats = async () => {
@@ -136,10 +395,6 @@ export default function ChatPage() {
       setIsLoadingMessages(true)
       setActiveChat(chat)
       
-      // Reset loading state when switching chats (in case a job is running in another chat)
-      const { setAssistantLoading } = useConversationStore.getState()
-      setAssistantLoading(false)
-      
       // Clean up any active listeners from previous chats
       activeListenersRef.current.forEach(({ unsubscribe, chatId }) => {
         if (chatId !== chat.id) {
@@ -157,6 +412,7 @@ export default function ChatPage() {
         throw new Error('Not authenticated')
       }
 
+      // Load messages
       const response = await fetch(
         `/api/chat/${chat.id}/messages/list?companyId=${selectedCompany}&page=1&limit=100`,
         {
@@ -175,46 +431,53 @@ export default function ChatPage() {
       
       console.log('📥 === LOADING MESSAGES FROM DATABASE ===')
       console.log('📊 Total messages loaded:', messages.length)
-      console.log('📋 Messages detail:', JSON.stringify(messages.map(m => ({
-        id: m.id,
-        role: m.role,
-        contentLength: m.content?.length,
-        hasToolCalls: !!m.toolCalls,
-        toolCallsCount: m.toolCalls?.length || 0,
-        toolCalls: m.toolCalls?.map(tc => ({
-          name: tc.name,
-          type: tc.type,
-          status: tc.status,
-          hasOutput: !!tc.output
-        }))
-      })), null, 2))
       
       // Convert API messages to UI items
       const items = convertMessagesToItems(messages)
       console.log('📊 Converted to', items.length, 'UI items')
-      console.log('📋 UI items detail:', JSON.stringify(items.map(i => ({
-        type: i.type,
-        role: i.type === 'message' ? i.role : undefined,
-        tool_type: i.type === 'tool_call' ? i.tool_type : undefined,
-        name: i.type === 'tool_call' ? i.name : undefined,
-        status: i.type === 'tool_call' ? i.status : undefined,
-        hasOutput: i.type === 'tool_call' ? !!i.output : undefined
-      })), null, 2))
       
       // Convert messages to conversation history format for API calls
       const { convertMessagesToConversationHistory } = await import('@/lib/chat/message-converter')
       const conversationHistory = convertMessagesToConversationHistory(messages)
       console.log('💬 Conversation history items:', conversationHistory.length)
-      console.log('📋 Conversation history:', JSON.stringify(conversationHistory.map(h => ({
-        role: h.role,
-        contentLength: h.content.length
-      })), null, 2))
       console.log('🏁 === LOADING COMPLETE ===')
       
       // Update both UI items and conversation history
-      const { setConversationItems } = useConversationStore.getState()
+      const { setConversationItems, setAssistantLoading } = useConversationStore.getState()
       setChatMessages(items)
       setConversationItems(conversationHistory)
+
+      // Check if there's an active job for this chat
+      console.log(`[CHAT PAGE] Checking for active jobs for chat: ${chat.id}`)
+      const activeJobResponse = await fetch(
+        `/api/chat/${chat.id}/active-job?companyId=${selectedCompany}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+
+      if (activeJobResponse.ok) {
+        const activeJobData = await activeJobResponse.json()
+        
+        if (activeJobData.activeJob) {
+          const jobId = activeJobData.activeJob.id
+          console.log(`[CHAT PAGE] 🔄 Found active job: ${jobId}, reconnecting to streaming...`)
+          
+          // Set loading state to show "Thinking" indicator
+          setAssistantLoading(true)
+          
+          // Reconnect to job streaming updates
+          await reconnectToJobStreaming(chat.id, jobId, token)
+        } else {
+          console.log(`[CHAT PAGE] ✅ No active jobs for this chat`)
+          setAssistantLoading(false)
+        }
+      } else {
+        console.warn(`[CHAT PAGE] Failed to check for active jobs`)
+        setAssistantLoading(false)
+      }
     } catch (error) {
       console.error('Error loading messages:', error)
       resetConversation()
