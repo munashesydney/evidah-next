@@ -52,8 +52,28 @@ export default function QuestionsPage() {
   useEffect(() => {
     if (uid) {
       fetchQuestions();
+      markNotificationsAsRead();
     }
   }, [uid]);
+
+  const markNotificationsAsRead = async () => {
+    if (!uid) return;
+
+    try {
+      await fetch('/api/notifications', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid,
+          companyId: selectedCompany,
+          type: 'question',
+          markAll: true,
+        }),
+      });
+    } catch (error) {
+      console.error('Error marking notifications as read:', error);
+    }
+  };
 
   const fetchQuestions = async () => {
     if (!uid) return;

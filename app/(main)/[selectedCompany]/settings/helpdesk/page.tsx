@@ -336,13 +336,13 @@ export default function HelpdeskPage() {
           </div>
         </section>
 
-        {/* Charlie Auto Response Section */}
+        {/* Charlie Auto Response Section 
         <section>
           <h2 className="text-2xl text-gray-800 dark:text-gray-100 font-bold mb-5">
             Charlie Auto Response ⭐
-          </h2>
+          </h2>*/}
 
-          {/* Auto Response Setting */}
+          {/* Auto Response Setting 
           <h2 className="text-xl leading-snug text-gray-800 dark:text-gray-100 font-bold mb-1">
             Auto Response
           </h2>
@@ -369,9 +369,9 @@ export default function HelpdeskPage() {
                 {!settings.aiMessagesOn ? 'Off' : 'On'}
               </div>
             </div>
-          )}
+          )}*/}
 
-          {/* Auto Suggest Setting */}
+          {/* Auto Suggest Setting 
           <h2 className="text-xl leading-snug text-gray-800 dark:text-gray-100 font-bold mb-1 mt-6">
             Auto Suggest
           </h2>
@@ -398,9 +398,9 @@ export default function HelpdeskPage() {
                 {!settings.aiSuggestionsOn ? 'Off' : 'On'}
               </div>
             </div>
-          )}
+          )}*/}
 
-          {/* Info about behavior */}
+          {/* Info about behavior 
           <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/60 rounded-lg">
             <div className="text-sm text-blue-800 dark:text-blue-300">
               <strong>How it works:</strong>
@@ -412,7 +412,7 @@ export default function HelpdeskPage() {
               </ul>
             </div>
           </div>
-        </section>
+        </section>*/}
 
         {/* Knowledge Sources Section */}
         <section>

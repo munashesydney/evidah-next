@@ -171,7 +171,7 @@ export async function updateTicket(
       {
         lastMessageDate: admin.firestore.FieldValue.serverTimestamp(),
         lastMessage: lastMessage,
-        read: false,
+        read: true,
         // Clear AI suggestion when sending a message
         lastAISuggestion: null,
         lastAISuggestionTimestamp: null,

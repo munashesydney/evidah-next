@@ -7,7 +7,7 @@
  * This script should be run alongside `npm run dev` during local development
  */
 
-const WORKER_ENDPOINT = process.env.WORKER_ENDPOINT || 'http://localhost:3002/api/workers/chat-processor';
+const WORKER_ENDPOINT = process.env.WORKER_ENDPOINT || 'http://localhost:3000/api/workers/chat-processor';
 const POLL_INTERVAL = 10000; // 10 seconds
 
 async function processJobs() {

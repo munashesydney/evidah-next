@@ -141,6 +141,29 @@ export async function POST(request: NextRequest) {
 
     console.log(`[DRAFTS] Draft created: ${draftRef.id}`);
 
+    // Create in-app notification
+    try {
+      const { NotificationService } = await import('@/lib/services/notification-service');
+      
+      // Check if notification already exists for this draft
+      const exists = await NotificationService.existsForReference(uid, selectedCompany, draftRef.id);
+      
+      if (!exists) {
+        await NotificationService.create({
+          uid,
+          companyId: selectedCompany,
+          type: 'ai_draft',
+          referenceId: draftRef.id,
+          title: 'New AI Draft Available',
+          message: `AI has created a draft response for ticket #${ticketId}`,
+        });
+        console.log(`[DRAFTS] ✅ In-app notification created for draft ${draftRef.id}`);
+      }
+    } catch (notifError) {
+      console.error('[DRAFTS] Failed to create in-app notification:', notifError);
+      // Don't fail the request if notification creation fails
+    }
+
     return NextResponse.json({
       success: true,
       draft: {
@@ -198,6 +221,16 @@ export async function DELETE(request: NextRequest) {
     await draftRef.delete();
 
     console.log(`[DRAFTS] Draft deleted: ${draftId}`);
+
+    // Delete associated notifications
+    try {
+      const { NotificationService } = await import('@/lib/services/notification-service');
+      await NotificationService.deleteByReference(uid, selectedCompany, draftId);
+      console.log(`[DRAFTS] ✅ Notifications deleted for draft ${draftId}`);
+    } catch (notifError) {
+      console.error('[DRAFTS] Failed to delete notifications:', notifError);
+      // Don't fail the request if notification deletion fails
+    }
 
     return NextResponse.json({
       success: true,

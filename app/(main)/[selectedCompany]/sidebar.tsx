@@ -18,6 +18,11 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
   const selectedCompany = params?.selectedCompany as string;
   const { theme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [notificationCounts, setNotificationCounts] = useState({
+    question: 0,
+    ai_draft: 0,
+    inbox: 0,
+  });
   
   const trigger = useRef<HTMLButtonElement>(null);
   const sidebar = useRef<HTMLDivElement>(null);
@@ -31,6 +36,42 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Fetch notification counts
+  useEffect(() => {
+    const fetchNotificationCounts = async () => {
+      if (!selectedCompany || typeof window === 'undefined') return;
+
+      try {
+        // Get uid from auth
+        const { auth } = await import('@/lib/firebase');
+        const user = auth.currentUser;
+        if (!user) return;
+
+        const response = await fetch(
+          `/api/notifications/count?uid=${user.uid}&companyId=${selectedCompany}`
+        );
+        const data = await response.json();
+
+        if (data.success && data.counts) {
+          setNotificationCounts({
+            question: data.counts.question || 0,
+            ai_draft: data.counts.ai_draft || 0,
+            inbox: data.counts.inbox || 0,
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching notification counts:', error);
+      }
+    };
+
+    fetchNotificationCounts();
+
+    // Poll for updates every 30 seconds
+    const interval = setInterval(fetchNotificationCounts, 30000);
+
+    return () => clearInterval(interval);
+  }, [selectedCompany]);
 
 
   // Close on click outside
@@ -245,6 +286,13 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
                       <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
                         Questions
                       </span>
+                      {notificationCounts.question > 0 && (
+                        <span className="ml-auto lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                          <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-violet-500 text-white text-xs font-semibold">
+                            {notificationCounts.question > 99 ? '99+' : notificationCounts.question}
+                          </span>
+                        </span>
+                      )}
                     </div>
                   </div>
                 </Link>
@@ -279,6 +327,13 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
                       <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
                         AI Drafts
                       </span>
+                      {notificationCounts.ai_draft > 0 && (
+                        <span className="ml-auto lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                          <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-violet-500 text-white text-xs font-semibold">
+                            {notificationCounts.ai_draft > 99 ? '99+' : notificationCounts.ai_draft}
+                          </span>
+                        </span>
+                      )}
                     </div>
                   </div>
                 </Link>
@@ -434,6 +489,13 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
                       <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
                         Inbox
                       </span>
+                      {notificationCounts.inbox > 0 && (
+                        <span className="ml-auto lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                          <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-violet-500 text-white text-xs font-semibold">
+                            {notificationCounts.inbox > 99 ? '99+' : notificationCounts.inbox}
+                          </span>
+                        </span>
+                      )}
                     </div>
                   </div>
                 </Link>

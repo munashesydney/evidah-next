@@ -38,8 +38,28 @@ export default function AIDraftsPage() {
   useEffect(() => {
     if (uid) {
       fetchDrafts();
+      markNotificationsAsRead();
     }
   }, [uid, selectedCompany]);
+
+  const markNotificationsAsRead = async () => {
+    if (!uid) return;
+
+    try {
+      await fetch('/api/notifications', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid,
+          companyId: selectedCompany,
+          type: 'ai_draft',
+          markAll: true,
+        }),
+      });
+    } catch (error) {
+      console.error('Error marking notifications as read:', error);
+    }
+  };
 
   const fetchDrafts = async (lastDocId?: string) => {
     if (!uid) return;

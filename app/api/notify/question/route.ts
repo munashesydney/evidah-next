@@ -224,6 +224,23 @@ export async function POST(request: NextRequest) {
 
     console.log(`[NOTIFY QUESTION] ✅ Email sent successfully to ${userEmail}`, info.messageId);
 
+    // Create in-app notification
+    try {
+      const { NotificationService } = await import('@/lib/services/notification-service');
+      await NotificationService.create({
+        uid,
+        companyId,
+        type: 'question',
+        referenceId: chatId,
+        title: 'New Question from AI Employee',
+        message: reason,
+      });
+      console.log(`[NOTIFY QUESTION] ✅ In-app notification created for chat ${chatId}`);
+    } catch (notifError) {
+      console.error('[NOTIFY QUESTION] Failed to create in-app notification:', notifError);
+      // Don't fail the request if notification creation fails
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Notification sent successfully',

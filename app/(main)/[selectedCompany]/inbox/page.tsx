@@ -344,6 +344,7 @@ export default function InboxPage() {
       if (user) {
         setUid(user.uid)
         fetchTickets(user.uid)
+        markNotificationsAsRead(user.uid)
       } else {
         router.push('/sign-in')
       }
@@ -351,6 +352,23 @@ export default function InboxPage() {
 
     return () => unsubscribe()
   }, [router, selectedCompany])
+
+  const markNotificationsAsRead = async (userId: string) => {
+    try {
+      await fetch('/api/notifications', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid: userId,
+          companyId: selectedCompany,
+          type: 'inbox',
+          markAll: true,
+        }),
+      });
+    } catch (error) {
+      console.error('Error marking notifications as read:', error);
+    }
+  }
 
   // Filter tickets based on search query
   useEffect(() => {
