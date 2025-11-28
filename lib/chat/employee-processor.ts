@@ -298,6 +298,11 @@ export async function processEmployeeChat(
             args.chat_id = chatId;
           }
 
+          // Inject employeeId for tools that need it (like escalate_to_human)
+          if (item.name === 'escalate_to_human' && employeeId) {
+            args.employeeId = employeeId;
+          }
+
             const result = await handleTool(
               item.name as keyof typeof functionsMap,
               args,

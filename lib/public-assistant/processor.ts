@@ -155,11 +155,12 @@ export async function processEmployeeResponse(
           ? JSON.parse(item.arguments) 
           : item.arguments;
         
-        // Inject uid, companyId, and context (sessionId, ticketId) for internal tool calls
+        // Inject uid, companyId, employeeId, and context (sessionId, ticketId) for internal tool calls
         const argsWithContext = {
           ...args,
           uid,
           companyId,
+          employeeId: employee, // Pass employee ID (marquavious or charlie)
           // Include sessionId and ticketId from context if available
           ...(context?.sessionId && { session_id: context.sessionId }),
           ...(context?.ticketId && { ticket_id: context.ticketId }),

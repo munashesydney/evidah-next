@@ -1782,6 +1782,7 @@ export const escalate_to_human = async ({
   summary,
   ticket_id,
   session_id,
+  employeeId,
 }: {
   uid: string;
   selectedCompany: string;
@@ -1790,6 +1791,7 @@ export const escalate_to_human = async ({
   summary?: string;
   ticket_id?: string;
   session_id?: string;
+  employeeId?: string;
 }) => {
   // Import the handler from public-assistant tools
   const { executePublicAssistantTool } = await import('@/lib/public-assistant/tools');
@@ -1802,6 +1804,7 @@ export const escalate_to_human = async ({
     summary,
     ticket_id,
     session_id,
+    employeeId,
   });
 
   return result;

@@ -68,6 +68,7 @@ async function handleEscalateToHuman(args: Record<string, any>): Promise<{ succe
   const uid = args.uid as string;
   const companyId = args.companyId as string;
   const conversationContext = args.conversationContext as string | undefined;
+  const employeeId = args.employeeId as string | undefined; // Get employee ID from context
 
   // Build enhanced summary with ticket_id and session_id if available
   let enhancedSummary = summary || '';
@@ -167,6 +168,7 @@ ${enhancedSummary ? `**Summary:**\n${enhancedSummary}\n\n` : ''}${conversationCo
           reason,
           urgency,
           summary: enhancedSummary,
+          employeeId, // Pass employee ID to email notification
         }),
       });
 

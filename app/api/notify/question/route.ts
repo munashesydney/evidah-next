@@ -31,7 +31,7 @@ const db = getFirestore();
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { uid, companyId, chatId, reason, urgency = 'medium', summary } = body;
+    const { uid, companyId, chatId, reason, urgency = 'medium', summary, employeeId } = body;
 
     if (!uid || !companyId || !chatId || !reason) {
       return NextResponse.json(
@@ -109,6 +109,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get employee name
+    const employeeNames: Record<string, string> = {
+      'marquavious': 'Marquavious',
+      'charlie': 'Charlie',
+    };
+    const employeeName = employeeNames[employeeId] || 'Your AI Employee';
+
     // Determine urgency emoji and color
     const urgencyMap: Record<string, { emoji: string; color: string; label: string }> = {
       low: { emoji: '💬', color: '#10B981', label: 'Low Priority' },
@@ -125,51 +132,52 @@ export async function POST(request: NextRequest) {
     console.log(`[NOTIFY QUESTION] Sending email to ${userEmail}`);
     
     const mailOptions = {
-      from: `"${companyName} AI Assistant" <noreply@evidah.com>`,
+      from: `"${employeeName} | Evidah" <noreply@evidah.com>`,
       to: userEmail,
-      subject: `${urgencyInfo.emoji} Question from Your AI Employee - ${companyName}`,
+      subject: `${employeeName} has a question`,
       html: `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Question from AI Employee</title>
+  <title>${employeeName} has a question</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
   <table role="presentation" style="width: 100%; border-collapse: collapse;">
     <tr>
-      <td align="center" style="padding: 40px 0;">
-        <table role="presentation" style="width: 600px; max-width: 100%; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+      <td align="center" style="padding: 40px 20px;">
+        <table role="presentation" style="width: 600px; max-width: 100%; border-collapse: collapse; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          
           <!-- Header -->
           <tr>
-            <td style="padding: 40px 40px 20px; text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px 8px 0 0;">
-              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600;">
-                ${urgencyInfo.emoji} Question from Your AI Employee
+            <td style="padding: 32px 32px 24px; border-bottom: 1px solid #e5e7eb;">
+              <h1 style="margin: 0; color: #111827; font-size: 24px; font-weight: 600;">
+                ${employeeName} | Evidah
               </h1>
             </td>
           </tr>
 
           <!-- Content -->
           <tr>
-            <td style="padding: 40px;">
+            <td style="padding: 32px;">
               <p style="margin: 0 0 20px; color: #374151; font-size: 16px; line-height: 1.6;">
-                Hi there,
+                Hi,
               </p>
               
-              <p style="margin: 0 0 20px; color: #374151; font-size: 16px; line-height: 1.6;">
-                One of your AI employees (Sung Wen) needs your help with a question. They've encountered something they're not certain about and want to make sure they provide you with accurate information.
+              <p style="margin: 0 0 24px; color: #374151; font-size: 16px; line-height: 1.6;">
+                I have a question and need your help. I'm not 100% certain about something and want to make sure I provide accurate information.
               </p>
 
               <!-- Question Details Box -->
-              <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 30px 0; background-color: #f9fafb; border-left: 4px solid ${urgencyInfo.color}; border-radius: 4px;">
+              <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 24px 0; background-color: #f9fafb; border-left: 4px solid ${urgencyInfo.color}; border-radius: 8px;">
                 <tr>
                   <td style="padding: 20px;">
-                    <p style="margin: 0 0 12px; color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                    <p style="margin: 0 0 8px; color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
                       ${urgencyInfo.label}
                     </p>
                     
-                    <p style="margin: 0 0 16px; color: #111827; font-size: 18px; font-weight: 600;">
+                    <p style="margin: 0 0 ${summary ? '16px' : '0'}; color: #111827; font-size: 16px; font-weight: 500; line-height: 1.5;">
                       ${reason}
                     </p>
                     
@@ -182,32 +190,32 @@ export async function POST(request: NextRequest) {
                 </tr>
               </table>
 
-              <p style="margin: 0 0 30px; color: #374151; font-size: 16px; line-height: 1.6;">
-                Click the button below to review the question and provide guidance:
+              <p style="margin: 0 0 28px; color: #374151; font-size: 16px; line-height: 1.6;">
+                Could you please help me understand how I should respond?
               </p>
 
               <!-- CTA Button -->
               <table role="presentation" style="width: 100%; border-collapse: collapse;">
                 <tr>
                   <td align="center">
-                    <a href="${chatUrl}" style="display: inline-block; padding: 16px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
-                      Review Question →
+                    <a href="${chatUrl}" style="display: inline-block; padding: 14px 28px; background-color: #7c3aed; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                      Help ${employeeName} →
                     </a>
                   </td>
                 </tr>
               </table>
 
-              <p style="margin: 30px 0 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
-                Your AI employees are designed to escalate questions when they're not 100% certain, ensuring accuracy and quality in all responses.
+              <p style="margin: 28px 0 0; color: #6b7280; font-size: 14px; line-height: 1.6; text-align: center;">
+                I always escalate when I'm not certain to ensure accuracy.
               </p>
             </td>
           </tr>
 
           <!-- Footer -->
           <tr>
-            <td style="padding: 20px 40px; background-color: #f9fafb; border-radius: 0 0 8px 8px; text-align: center;">
+            <td style="padding: 20px 32px; background-color: #f9fafb; border-radius: 0 0 12px 12px; text-align: center; border-top: 1px solid #e5e7eb;">
               <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                ${companyName} | Powered by AI Knowledge Desk
+                ${companyName} | Powered by Evidah
               </p>
             </td>
           </tr>
