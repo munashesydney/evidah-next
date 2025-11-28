@@ -14,6 +14,8 @@ interface Action {
   employee: string;
   prompt: string;
   enabled: boolean;
+  isSystem?: boolean;
+  systemActionId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -28,10 +30,6 @@ const employees = [
 const triggers = [
   { id: 'new_ticket', label: 'New Ticket Created' },
   { id: 'ticket_reply', label: 'Ticket Reply Received' },
-  { id: 'new_chat', label: 'New Chat Started' },
-  { id: 'chat_message', label: 'Chat Message Received' },
-  { id: 'article_created', label: 'Article Created' },
-  { id: 'article_updated', label: 'Article Updated' },
   { id: 'question_answered', label: 'Question Answered' },
 ];
 
@@ -44,6 +42,8 @@ export default function ActionsPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [showSystemBanner, setShowSystemBanner] = useState(false);
+  const [installingSystem, setInstallingSystem] = useState(false);
 
   // Form state
   const [selectedTrigger, setSelectedTrigger] = useState('');
@@ -85,11 +85,49 @@ export default function ActionsPage() {
 
       if (data.success) {
         setActions(data.actions);
+        
+        // Check if user has all system actions
+        const hasNewTicket = data.actions.some((a: Action) => a.trigger === 'new_ticket' && a.employee === 'charlie' && a.isSystem);
+        const hasTicketReply = data.actions.some((a: Action) => a.trigger === 'ticket_reply' && a.employee === 'charlie' && a.isSystem);
+        const hasQuestionAnswered = data.actions.some((a: Action) => a.trigger === 'question_answered' && a.employee === 'charlie' && a.isSystem);
+        
+        setShowSystemBanner(!hasNewTicket || !hasTicketReply || !hasQuestionAnswered);
       }
     } catch (error) {
       console.error('Error fetching actions:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleInstallSystemActions = async () => {
+    if (!uid) return;
+
+    try {
+      setInstallingSystem(true);
+      const response = await fetch('/api/actions/install-system', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid,
+          selectedCompany,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Refresh actions list
+        await fetchActions();
+        setShowSystemBanner(false);
+      } else {
+        alert('Failed to install system actions');
+      }
+    } catch (error) {
+      console.error('Error installing system actions:', error);
+      alert('Failed to install system actions');
+    } finally {
+      setInstallingSystem(false);
     }
   };
 
@@ -277,6 +315,72 @@ export default function ActionsPage() {
         </p>
       </div>
 
+      {/* System Actions Banner */}
+      {showSystemBanner && !loading && (
+        <div className="mb-6 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 border-2 border-violet-200 dark:border-violet-800 rounded-2xl p-6">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <div className="flex items-center space-x-2 mb-2">
+                <svg className="w-6 h-6 text-violet-600 dark:text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Recommended System Actions
+                </h3>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Get started quickly with our recommended automation actions. These will help Charlie automatically draft email responses for new tickets, ticket replies, and answered questions.
+              </p>
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300">
+                  <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span>Auto-draft emails for new tickets</span>
+                </div>
+                <div className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300">
+                  <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span>Auto-draft emails for ticket replies</span>
+                </div>
+                <div className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300">
+                  <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span>Auto-respond when questions are answered</span>
+                </div>
+              </div>
+              <button
+                onClick={handleInstallSystemActions}
+                disabled={installingSystem}
+                className="px-6 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white font-medium rounded-xl hover:from-violet-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
+              >
+                {installingSystem ? (
+                  <span className="flex items-center space-x-2">
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Installing...</span>
+                  </span>
+                ) : (
+                  'Install System Actions'
+                )}
+              </button>
+            </div>
+            <button
+              onClick={() => setShowSystemBanner(false)}
+              className="ml-4 p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Actions List */}
       <div className="mb-6 space-y-4">
         {loading ? (
@@ -329,7 +433,7 @@ export default function ActionsPage() {
 
                     {/* Action Details */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2 mb-2">
+                      <div className="flex items-center space-x-2 mb-2 flex-wrap">
                         <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-violet-100 dark:bg-violet-900/30 text-violet-800 dark:text-violet-300">
                           {getTriggerLabel(action.trigger)}
                         </span>
@@ -337,6 +441,11 @@ export default function ActionsPage() {
                         <span className="font-medium text-gray-900 dark:text-white">
                           {employee?.name}
                         </span>
+                        {action.isSystem && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-sm">
+                            SYSTEM
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
                         {action.prompt}
@@ -364,29 +473,31 @@ export default function ActionsPage() {
                         }`}
                       />
                     </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEdit(action);
-                      }}
-                      className="p-2 text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
-                      title="Edit action"
-                    >
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                        />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={(e) => handleDeleteClick(e, action.id)}
-                      disabled={deletingActionId === action.id}
-                      className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Delete action"
-                    >
+                    {!action.isSystem && (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(action);
+                          }}
+                          className="p-2 text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+                          title="Edit action"
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                            />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteClick(e, action.id)}
+                          disabled={deletingActionId === action.id}
+                          className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Delete action"
+                        >
                       {deletingActionId === action.id ? (
                         <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -403,6 +514,8 @@ export default function ActionsPage() {
                         </svg>
                       )}
                     </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
