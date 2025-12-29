@@ -169,7 +169,11 @@ export async function POST(
         headers: {
           'Content-Type': 'application/json',
         },
-        // Don't wait for response - process in background
+        body: JSON.stringify({
+          jobId: job.id,
+          userId,
+          companyId,
+        }),
       }).catch((err) => {
         // Silently fail - cron will pick it up as backup
         console.warn(`[CHAT RESPOND] Failed to trigger worker immediately (cron will handle it):`, err.message);

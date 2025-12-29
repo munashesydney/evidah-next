@@ -160,7 +160,7 @@ export default function InboxInputArea({
           if (storedFrom) {
             try {
               const parsed = JSON.parse(storedFrom)
-              const matchingEmail = data.emails.find((e: any) => e.emailAddress === parsed.emailAddress)
+              const matchingEmail = data.emails.find((e: any) => e.fromEmail === parsed.fromEmail)
               if (matchingEmail) {
                 setCurrentFrom(matchingEmail)
                 return
@@ -375,7 +375,7 @@ export default function InboxInputArea({
         currentFrom: currentFrom ? {
           id: currentFrom.id,
           type: currentFrom.type,
-          emailAddress: currentFrom.emailAddress,
+          fromEmail: currentFrom.fromEmail,
         } : undefined,
         fileUrls,
       }
@@ -408,7 +408,7 @@ export default function InboxInputArea({
         const newMessage = {
           id: result.messageId || `temp-${Date.now()}`,
           to: ticketData.from,
-          from: currentFrom?.emailAddress || `${subdomain}@ourkd.help`,
+          from: currentFrom?.fromEmail || `${subdomain}@ourkd.help`,
           body: text,
           subject,
           date: new Date(),
@@ -459,9 +459,9 @@ export default function InboxInputArea({
               <select
                 id="email-select"
                 className="form-select w-full bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-700 focus:border-violet-500 focus:ring-violet-500"
-                value={currentFrom?.emailAddress || ''}
+                value={currentFrom?.fromEmail || ''}
                 onChange={(e) => {
-                  const selectedEmail = emails.find((email) => email.emailAddress === e.target.value)
+                  const selectedEmail = emails.find((email) => email.fromEmail === e.target.value)
                   setCurrentFrom(selectedEmail || null)
                   // Save to localStorage
                   if (selectedEmail) {
@@ -479,8 +479,8 @@ export default function InboxInputArea({
                   <>
                     <option value="">Select email...</option>
                     {emails.map((email) => (
-                      <option key={email.id} value={email.emailAddress}>
-                        {email.emailAddress}
+                      <option key={email.id} value={email.fromEmail}>
+                        {email.senderName} &lt;{email.fromEmail}&gt;
                       </option>
                     ))}
                   </>

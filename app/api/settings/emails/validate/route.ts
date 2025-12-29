@@ -4,10 +4,10 @@ import nodemailer from 'nodemailer';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, smtpServer, port, password } = body;
+    const { username, smtpServer, port, password } = body;
 
     // Validation
-    if (!email || !smtpServer || !port || !password) {
+    if (!username || !smtpServer || !port || !password) {
       return NextResponse.json(
         { status: 0, isGood: false, error: 'Missing required fields' },
         { status: 400 }
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
       port: parseInt(port.toString()),
       secure: port === 465 || port === '465', // true for 465, false for other ports
       auth: {
-        user: email,
+        user: username,
         pass: password,
       },
     });

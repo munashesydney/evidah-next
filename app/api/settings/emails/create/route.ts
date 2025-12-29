@@ -18,12 +18,12 @@ const db = getFirestore();
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { uid, selectedCompany, emailAddress, smtpServer, port, password } = body;
+    const { uid, selectedCompany, username, fromEmail, senderName, smtpServer, port, password } = body;
 
     // Validation
-    if (!uid || !emailAddress || !smtpServer || !port || !password) {
+    if (!uid || !username || !fromEmail || !senderName || !smtpServer || !port || !password) {
       return NextResponse.json(
-        { error: 'Missing required fields: uid, emailAddress, smtpServer, port, password' },
+        { error: 'Missing required fields: uid, username, fromEmail, senderName, smtpServer, port, password' },
         { status: 400 }
       );
     }
@@ -48,14 +48,14 @@ export async function POST(request: NextRequest) {
     // Add email to the emails sub-collection
     const emailsRef = kbRef.collection('emails');
     
-    // Check if email already exists
+    // Check if from email already exists
     const existingEmailsSnapshot = await emailsRef
-      .where('emailAddress', '==', emailAddress)
+      .where('fromEmail', '==', fromEmail)
       .get();
 
     if (!existingEmailsSnapshot.empty) {
       return NextResponse.json(
-        { error: 'Email address already exists' },
+        { error: 'From email address already exists' },
         { status: 400 }
       );
     }
@@ -63,7 +63,9 @@ export async function POST(request: NextRequest) {
     // Create new email document
     const emailDocRef = emailsRef.doc();
     await emailDocRef.set({
-      emailAddress: emailAddress,
+      username: username,
+      fromEmail: fromEmail,
+      senderName: senderName,
       smtpServer: smtpServer,
       port: port,
       password: password, // Note: Consider encrypting this in production
@@ -74,7 +76,9 @@ export async function POST(request: NextRequest) {
     // Return the created email data (without password)
     const createdEmail = {
       id: emailDocRef.id,
-      emailAddress: emailAddress,
+      username: username,
+      fromEmail: fromEmail,
+      senderName: senderName,
       smtpServer: smtpServer,
       port: port,
       default: false,

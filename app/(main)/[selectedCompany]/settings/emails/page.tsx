@@ -10,7 +10,9 @@ const auth = getAuth(app);
 
 interface Email {
   id: string;
-  emailAddress: string;
+  username: string;
+  fromEmail: string;
+  senderName: string;
   smtpServer: string;
   port: string;
   default: boolean;
@@ -32,7 +34,9 @@ export default function EmailsPage() {
   const [emails, setEmails] = useState<Email[]>([]);
 
   // Form state
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [fromEmail, setFromEmail] = useState('');
+  const [senderName, setSenderName] = useState('');
   const [smtpServer, setSmtpServer] = useState('');
   const [port, setPort] = useState('');
   const [password, setPassword] = useState('');
@@ -85,7 +89,7 @@ export default function EmailsPage() {
     }
 
     // Validation
-    if (!email || !smtpServer || !port || !password) {
+    if (!username || !fromEmail || !senderName || !smtpServer || !port || !password) {
       setError('All fields are required.');
       return;
     }
@@ -98,7 +102,7 @@ export default function EmailsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email,
+          username,
           smtpServer,
           port,
           password,
@@ -120,7 +124,9 @@ export default function EmailsPage() {
         body: JSON.stringify({
           uid,
           selectedCompany,
-          emailAddress: email,
+          username,
+          fromEmail,
+          senderName,
           smtpServer,
           port,
           password,
@@ -131,7 +137,9 @@ export default function EmailsPage() {
 
       if (createResult.success) {
         // Clear the form
-        setEmail('');
+        setUsername('');
+        setFromEmail('');
+        setSenderName('');
         setSmtpServer('');
         setPort('');
         setPassword('');
@@ -222,23 +230,56 @@ export default function EmailsPage() {
         {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
         {saved && <p className="text-green-500 text-sm mb-4">Email saved successfully!</p>}
 
-        {/* Row with Email, SMTP Server, and Port */}
+        {/* Row 1: Username, From Email, Sender Name */}
         <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-4 sm:space-y-0 mb-4">
           <div className="sm:w-1/3">
-            <label className="block text-sm font-medium mb-1" htmlFor="email">
-              Email Address
+            <label className="block text-sm font-medium mb-1" htmlFor="username">
+              SMTP Username
             </label>
             <input
-              type="email"
-              id="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              id="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               className="form-input w-full"
-              placeholder="Enter your email address"
+              placeholder="e.g., user@example.com"
               required
             />
           </div>
 
+          <div className="sm:w-1/3">
+            <label className="block text-sm font-medium mb-1" htmlFor="fromEmail">
+              From Email Address
+            </label>
+            <input
+              type="email"
+              id="fromEmail"
+              value={fromEmail}
+              onChange={(e) => setFromEmail(e.target.value)}
+              className="form-input w-full"
+              placeholder="e.g., support@yourdomain.com"
+              required
+            />
+          </div>
+
+          <div className="sm:w-1/3">
+            <label className="block text-sm font-medium mb-1" htmlFor="senderName">
+              Sender Name
+            </label>
+            <input
+              type="text"
+              id="senderName"
+              value={senderName}
+              onChange={(e) => setSenderName(e.target.value)}
+              className="form-input w-full"
+              placeholder="e.g., Support Team"
+              required
+            />
+          </div>
+        </div>
+
+        {/* Row 2: SMTP Server, Port, Password */}
+        <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-4 sm:space-y-0 mb-4">
           <div className="sm:w-1/3">
             <label className="block text-sm font-medium mb-1" htmlFor="smtpServer">
               SMTP Server
@@ -249,7 +290,7 @@ export default function EmailsPage() {
               value={smtpServer}
               onChange={(e) => setSmtpServer(e.target.value)}
               className="form-input w-full"
-              placeholder="Enter SMTP server"
+              placeholder="e.g., smtp.gmail.com"
               required
             />
           </div>
@@ -264,26 +305,25 @@ export default function EmailsPage() {
               value={port}
               onChange={(e) => setPort(e.target.value)}
               className="form-input w-full"
-              placeholder="Enter port"
+              placeholder="e.g., 465 or 587"
               required
             />
           </div>
-        </div>
 
-        {/* Password Field */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-1" htmlFor="password">
-            Password
-          </label>
-          <input
-            type="password"
-            id="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="form-input w-full"
-            placeholder="Enter your password"
-            required
-          />
+          <div className="sm:w-1/3">
+            <label className="block text-sm font-medium mb-1" htmlFor="password">
+              Password
+            </label>
+            <input
+              type="password"
+              id="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="form-input w-full"
+              placeholder="Enter SMTP password"
+              required
+            />
+          </div>
         </div>
 
         <button
@@ -346,14 +386,14 @@ export default function EmailsPage() {
                 className="border-b border-gray-200 dark:border-gray-700 py-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4"
               >
                 <div>
-                  <span className="font-bold text-gray-800 dark:text-gray-100">
-                    {emailDoc.emailAddress}
-                  </span>{' '}
-                  <span className="text-gray-600 dark:text-gray-400">
-                    - {emailDoc.smtpServer}:{emailDoc.port}
-                  </span>
+                  <div className="font-bold text-gray-800 dark:text-gray-100">
+                    {emailDoc.senderName} &lt;{emailDoc.fromEmail}&gt;
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    Username: {emailDoc.username} | Server: {emailDoc.smtpServer}:{emailDoc.port}
+                  </div>
                   {emailDoc.default && (
-                    <span className="ml-2 text-green-600 dark:text-green-400">(Default)</span>
+                    <span className="text-sm text-green-600 dark:text-green-400">(Default)</span>
                   )}
                 </div>
                 <div className="flex gap-2">

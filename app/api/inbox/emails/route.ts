@@ -67,7 +67,9 @@ export async function GET(request: NextRequest) {
       const data = doc.data();
       return {
         id: doc.id,
-        emailAddress: data.emailAddress,
+        username: data.username,
+        fromEmail: data.fromEmail,
+        senderName: data.senderName,
         smtpServer: data.smtpServer,
         port: data.port,
         type: 'custom' as const,
@@ -80,7 +82,9 @@ export async function GET(request: NextRequest) {
     const defaultEmail = subdomain
       ? {
           id: null,
-          emailAddress: `${subdomain}@ourkd.help`,
+          username: 'all@ourkd.help',
+          fromEmail: `${subdomain}@ourkd.help`,
+          senderName: knowledgeBaseDoc.data()?.name || 'Support',
           smtpServer: null,
           port: null,
           type: 'default' as const,

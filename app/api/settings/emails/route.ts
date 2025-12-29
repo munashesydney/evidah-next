@@ -51,7 +51,9 @@ export async function GET(request: NextRequest) {
       const data = doc.data();
       return {
         id: doc.id,
-        emailAddress: data.emailAddress || '',
+        username: data.username || '',
+        fromEmail: data.fromEmail || '',
+        senderName: data.senderName || '',
         smtpServer: data.smtpServer || '',
         port: data.port || '',
         default: data.default || false,

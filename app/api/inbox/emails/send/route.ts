@@ -34,7 +34,9 @@ function initializeFirebase() {
 interface EmailConfig {
   smtpServer?: string;
   port?: number;
-  emailAddress?: string;
+  username?: string;
+  fromEmail?: string;
+  senderName?: string;
   password?: string;
 }
 
@@ -140,7 +142,9 @@ export async function POST(request: NextRequest) {
         fromConfig = {
           smtpServer: emailData?.smtpServer,
           port: emailData?.port,
-          emailAddress: emailData?.emailAddress,
+          username: emailData?.username,
+          fromEmail: emailData?.fromEmail,
+          senderName: emailData?.senderName,
           password: emailData?.password,
         };
         hasCustomConfig = true;
@@ -156,15 +160,18 @@ export async function POST(request: NextRequest) {
     const resolvedSecure = hasCustomConfig && fromConfig.port != null
       ? Number(fromConfig.port) === 465 || String(fromConfig.port) === '465'
       : true;
-    const resolvedUser = hasCustomConfig && fromConfig.emailAddress 
-      ? fromConfig.emailAddress 
+    const resolvedUser = hasCustomConfig && fromConfig.username 
+      ? fromConfig.username 
       : 'all@ourkd.help';
     const resolvedPass = hasCustomConfig && fromConfig.password 
       ? fromConfig.password 
       : process.env.DEFAULT_EMAIL_PASSWORD || '';
-    const resolvedFrom = hasCustomConfig && fromConfig.emailAddress 
-      ? fromConfig.emailAddress 
+    const resolvedFrom = hasCustomConfig && fromConfig.fromEmail 
+      ? fromConfig.fromEmail 
       : `${subdomain}@ourkd.help`;
+    const resolvedSenderName = hasCustomConfig && fromConfig.senderName 
+      ? fromConfig.senderName 
+      : companyName || 'Support';
 
     console.log('Resolved SMTP configuration:', {
       type: hasCustomConfig ? 'custom' : 'default',
@@ -174,6 +181,7 @@ export async function POST(request: NextRequest) {
       secure: resolvedSecure,
       user: resolvedUser,
       from: resolvedFrom,
+      senderName: resolvedSenderName,
       hasPassword: !!resolvedPass,
     });
 
@@ -190,7 +198,7 @@ export async function POST(request: NextRequest) {
 
     // Prepare email with attachments
     const emailOptions: any = {
-      from: resolvedFrom,
+      from: `${resolvedSenderName} <${resolvedFrom}>`,
       to: newTo,
       subject: subject,
       text: message,

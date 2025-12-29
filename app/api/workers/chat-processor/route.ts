@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { JobQueueService } from '@/lib/services/job-queue-service';
+import { JobQueueService, ChatJob } from '@/lib/services/job-queue-service';
 import { processEmployeeChat } from '@/lib/chat/employee-processor';
 import { ToolsState } from '@/stores/chat/useToolsStore';
 
@@ -11,6 +11,137 @@ import { ToolsState } from '@/stores/chat/useToolsStore';
  * Security: Should be protected by Vercel Cron secret or API key
  * For now, we'll use a simple secret check via header
  */
+async function parseRequestBody(request: NextRequest) {
+  try {
+    const raw = await request.text();
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw);
+  } catch (error) {
+    console.warn('[CHAT WORKER] Failed to parse request body:', error);
+    return null;
+  }
+}
+
+async function processJob(job: ChatJob) {
+  console.log(`[CHAT WORKER] Processing job ${job.id} for chat ${job.chatId}`);
+
+  const outcome = {
+    processed: 0,
+    completed: 0,
+    failed: 0,
+    errors: [] as string[],
+  };
+
+  try {
+    await JobQueueService.markAsProcessing(
+      job.userId,
+      job.companyId,
+      job.id
+    );
+
+    const result = await processEmployeeChat(job.messages, {
+      chatId: job.chatId,
+      companyId: job.companyId,
+      uid: job.userId,
+      employeeId: job.employeeId,
+      personalityLevel: job.personalityLevel,
+      maxIterations: 10,
+      toolsState: job.toolsState as ToolsState | undefined,
+      onStream: async (event) => {
+        try {
+          if (!event || !event.type) {
+            console.warn('[CHAT WORKER] Invalid stream event received:', event);
+            return;
+          }
+
+          await JobQueueService.writeStreamingUpdate(
+            job.userId,
+            job.companyId,
+            job.id,
+            event
+          );
+        } catch (error) {
+          console.error(`[CHAT WORKER] Failed to write streaming update:`, error);
+        }
+      },
+    });
+
+    if (result.success) {
+      await JobQueueService.markAsCompleted(
+        job.userId,
+        job.companyId,
+        job.id,
+        result.messagesSaved
+      );
+      outcome.completed++;
+      console.log(`[CHAT WORKER] ✅ Job ${job.id} completed - ${result.messagesSaved} messages saved`);
+    } else {
+      const errorMessage = result.error || 'Unknown error';
+      await JobQueueService.markAsFailed(
+        job.userId,
+        job.companyId,
+        job.id,
+        errorMessage,
+        (job.retryCount || 0) + 1
+      );
+      outcome.failed++;
+      outcome.errors.push(`Job ${job.id}: ${errorMessage}`);
+      console.error(`[CHAT WORKER] ❌ Job ${job.id} failed: ${errorMessage}`);
+
+      const maxRetries = 3;
+      if ((job.retryCount || 0) < maxRetries) {
+        try {
+          await JobQueueService.retryJob(
+            job.userId,
+            job.companyId,
+            job.id
+          );
+          console.log(`[CHAT WORKER] 🔄 Retrying job ${job.id} (attempt ${(job.retryCount || 0) + 1}/${maxRetries})`);
+        } catch (retryError) {
+          console.error(`[CHAT WORKER] Failed to retry job ${job.id}:`, retryError);
+        }
+      }
+    }
+
+    outcome.processed++;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    try {
+      await JobQueueService.markAsFailed(
+        job.userId,
+        job.companyId,
+        job.id,
+        errorMessage,
+        (job.retryCount || 0) + 1
+      );
+    } catch (updateError) {
+      console.error(`[CHAT WORKER] Failed to update job ${job.id} status:`, updateError);
+    }
+
+    outcome.failed++;
+    outcome.errors.push(`Job ${job.id}: ${errorMessage}`);
+    console.error(`[CHAT WORKER] ❌ Error processing job ${job.id}:`, error);
+
+    const maxRetries = 3;
+    if ((job.retryCount || 0) < maxRetries) {
+      try {
+        await JobQueueService.retryJob(
+          job.userId,
+          job.companyId,
+          job.id
+        );
+        console.log(`[CHAT WORKER] 🔄 Retrying job ${job.id} after error`);
+      } catch (retryError) {
+        console.error(`[CHAT WORKER] Failed to retry job ${job.id}:`, retryError);
+      }
+    }
+  }
+
+  return outcome;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Optional: Verify this is called by Vercel Cron or authorized source
@@ -28,10 +159,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log('[CHAT WORKER] Starting job processing...');
+    const body = await parseRequestBody(request);
+    let pendingJobs: ChatJob[] = [];
 
-    // Fetch pending jobs (limit to prevent overload)
-    const pendingJobs = await JobQueueService.getPendingJobs(10);
+    if (body?.jobId && body?.userId && body?.companyId) {
+      console.log(`[CHAT WORKER] Targeted job request received for ${body.jobId}`);
+      const targetedJob = await JobQueueService.getJob(
+        body.userId,
+        body.companyId,
+        body.jobId
+      );
+
+      if (!targetedJob) {
+        console.warn(`[CHAT WORKER] Targeted job ${body.jobId} not found`);
+      } else if (targetedJob.status !== 'pending') {
+        console.log(`[CHAT WORKER] Targeted job ${body.jobId} is ${targetedJob.status}, skipping`);
+      } else {
+        pendingJobs = [targetedJob];
+      }
+    }
+
+    if (pendingJobs.length === 0) {
+      console.log('[CHAT WORKER] Starting job processing...');
+      pendingJobs = await JobQueueService.getPendingJobs(10);
+    }
     
     if (pendingJobs.length === 0) {
       console.log('[CHAT WORKER] No pending jobs found');
@@ -50,128 +201,13 @@ export async function POST(request: NextRequest) {
       errors: [] as string[],
     };
 
-    // Process each job
     for (const job of pendingJobs) {
-      try {
-        console.log(`[CHAT WORKER] Processing job ${job.id} for chat ${job.chatId}`);
-
-        // Mark job as processing
-        await JobQueueService.markAsProcessing(
-          job.userId,
-          job.companyId,
-          job.id
-        );
-
-        // Process the chat with autonomous loop
-        // Use onStream to write updates to Firestore for real-time frontend updates
-        const result = await processEmployeeChat(job.messages, {
-          chatId: job.chatId,
-          companyId: job.companyId,
-          uid: job.userId,
-          employeeId: job.employeeId,
-          personalityLevel: job.personalityLevel,
-          maxIterations: 10,
-          toolsState: job.toolsState as ToolsState | undefined,
-          onStream: async (event) => {
-            // Write streaming updates to Firestore for real-time frontend updates
-            try {
-              // Validate event before writing
-              if (!event || !event.type) {
-                console.warn('[CHAT WORKER] Invalid stream event received:', event);
-                return;
-              }
-              
-              await JobQueueService.writeStreamingUpdate(
-                job.userId,
-                job.companyId,
-                job.id,
-                event
-              );
-            } catch (error) {
-              // Log but don't fail the job if streaming update fails
-              console.error(`[CHAT WORKER] Failed to write streaming update:`, error);
-              // Don't rethrow - we want the job to continue even if streaming fails
-            }
-          },
-        });
-
-        if (result.success) {
-          // Mark job as completed
-          await JobQueueService.markAsCompleted(
-            job.userId,
-            job.companyId,
-            job.id,
-            result.messagesSaved
-          );
-
-          results.completed++;
-          console.log(`[CHAT WORKER] ✅ Job ${job.id} completed - ${result.messagesSaved} messages saved`);
-        } else {
-          // Mark job as failed
-          const errorMessage = result.error || 'Unknown error';
-          await JobQueueService.markAsFailed(
-            job.userId,
-            job.companyId,
-            job.id,
-            errorMessage,
-            (job.retryCount || 0) + 1
-          );
-
-          results.failed++;
-          results.errors.push(`Job ${job.id}: ${errorMessage}`);
-          console.error(`[CHAT WORKER] ❌ Job ${job.id} failed: ${errorMessage}`);
-
-          // Optionally retry failed jobs (if retry count < max)
-          const maxRetries = 3;
-          if ((job.retryCount || 0) < maxRetries) {
-            try {
-              await JobQueueService.retryJob(
-                job.userId,
-                job.companyId,
-                job.id
-              );
-              console.log(`[CHAT WORKER] 🔄 Retrying job ${job.id} (attempt ${(job.retryCount || 0) + 1}/${maxRetries})`);
-            } catch (retryError) {
-              console.error(`[CHAT WORKER] Failed to retry job ${job.id}:`, retryError);
-            }
-          }
-        }
-
-        results.processed++;
-      } catch (error) {
-        // Handle unexpected errors
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        
-        try {
-          await JobQueueService.markAsFailed(
-            job.userId,
-            job.companyId,
-            job.id,
-            errorMessage,
-            (job.retryCount || 0) + 1
-          );
-        } catch (updateError) {
-          console.error(`[CHAT WORKER] Failed to update job ${job.id} status:`, updateError);
-        }
-
-        results.failed++;
-        results.errors.push(`Job ${job.id}: ${errorMessage}`);
-        console.error(`[CHAT WORKER] ❌ Error processing job ${job.id}:`, error);
-
-        // Optionally retry
-        const maxRetries = 3;
-        if ((job.retryCount || 0) < maxRetries) {
-          try {
-            await JobQueueService.retryJob(
-              job.userId,
-              job.companyId,
-              job.id
-            );
-            console.log(`[CHAT WORKER] 🔄 Retrying job ${job.id} after error`);
-          } catch (retryError) {
-            console.error(`[CHAT WORKER] Failed to retry job ${job.id}:`, retryError);
-          }
-        }
+      const outcome = await processJob(job);
+      results.processed += outcome.processed;
+      results.completed += outcome.completed;
+      results.failed += outcome.failed;
+      if (outcome.errors.length) {
+        results.errors.push(...outcome.errors);
       }
     }
 
