@@ -41,6 +41,24 @@ export default function OnboardingGuard({ children }: { children: React.ReactNod
           return;
         }
 
+        // Check if user is an agent (has role in custom claims that is NOT 'Owner')
+        // Agents don't need to complete onboarding - they're accessing an existing workspace
+        try {
+          const idTokenResult = await user.getIdTokenResult();
+          const role = idTokenResult.claims.role;
+          // Agents have role like 'Sales', 'Support', 'Admin' - NOT 'Owner'
+          const isAgent = role && typeof role === 'string' && role !== 'Owner';
+          
+          if (isAgent) {
+            console.log('User is an agent, skipping onboarding check');
+            setLoading(false);
+            return;
+          }
+        } catch (error) {
+          console.error('Error checking user custom claims:', error);
+          // Continue with normal flow if we can't check claims
+        }
+
         // Check if we're in a (main)/[selectedCompany] route
         const selectedCompany = params?.selectedCompany as string;
         if (selectedCompany) {

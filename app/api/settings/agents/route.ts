@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const uid = searchParams.get('uid');
+    const selectedCompany = searchParams.get('selectedCompany') || 'default';
 
     // Validation
     if (!uid) {
@@ -28,8 +29,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Fetch all agents from AdditionalUsers sub-collection
-    const agentsRef = db.collection('Users').doc(uid).collection('AdditionalUsers');
+    // Fetch all agents from workspace-specific AdditionalUsers sub-collection
+    const agentsRef = db
+      .collection('Users')
+      .doc(uid)
+      .collection('knowledgebases')
+      .doc(selectedCompany)
+      .collection('AdditionalUsers');
     const agentsSnapshot = await agentsRef.get();
 
     if (agentsSnapshot.empty) {

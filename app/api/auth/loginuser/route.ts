@@ -50,10 +50,23 @@ export async function POST(request: NextRequest) {
     const additionalUserData = additionalUserDoc.data();
 
     // Get the parent document reference (the primary user/company UID)
-    const parentDocRef = additionalUserDoc.ref.parent.parent;
-    const foundUser = await parentDocRef?.get();
+    // Get the user UID - need to go up 3 levels from AdditionalUsers/{agentId}
+    // Structure: Users/{uid}/knowledgebases/{selectedCompany}/AdditionalUsers/{agentId}
+    // ref.parent.parent = knowledgebases/{selectedCompany}
+    // ref.parent.parent.parent.parent = Users/{uid}
+    const knowledgebaseDocRef = additionalUserDoc.ref.parent.parent; // knowledgebases/{selectedCompany}
+    const userDocRef = knowledgebaseDocRef?.parent?.parent; // Users/{uid}
+    
+    if (!userDocRef) {
+      return NextResponse.json(
+        { status: 0, message: 'User not found.', customToken: null },
+        { status: 404 }
+      );
+    }
+    
+    const foundUser = await userDocRef.get();
 
-    if (!foundUser) {
+    if (!foundUser || !foundUser.exists) {
       return NextResponse.json(
         { status: 0, message: 'User not found.', customToken: null },
         { status: 404 }

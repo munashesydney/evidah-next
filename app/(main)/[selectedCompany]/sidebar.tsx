@@ -3,18 +3,31 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useParams, usePathname } from 'next/navigation';
+import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import SidebarLinkGroup from '@/components/ui/sidebar-link-group';
+import { auth, db } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 interface SidebarProps {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
 }
 
+// Access control based on employee subscription
+interface AccessControl {
+  emma: boolean;       // Knowledge Base
+  sungWen: boolean;    // Training
+  marquavious: boolean;// Live Chat
+  charlie: boolean;    // Inbox (Help Desk)
+  evidahQ: boolean;    // Full access
+}
+
 export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
   const pathname = usePathname();
   const params = useParams();
+  const router = useRouter();
   const selectedCompany = params?.selectedCompany as string;
   const { theme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -23,6 +36,16 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
     ai_draft: 0,
     inbox: 0,
   });
+  
+  // Access control state
+  const [access, setAccess] = useState<AccessControl>({
+    emma: false,
+    sungWen: false,
+    marquavious: false,
+    charlie: false,
+    evidahQ: false,
+  });
+  const [accessLoading, setAccessLoading] = useState(true);
   
   const trigger = useRef<HTMLButtonElement>(null);
   const sidebar = useRef<HTMLDivElement>(null);
@@ -36,6 +59,65 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Fetch access control from knowledgebase
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user && selectedCompany) {
+        try {
+          const kbRef = doc(db, 'Users', user.uid, 'knowledgebases', selectedCompany);
+          const kbDoc = await getDoc(kbRef);
+          
+          if (kbDoc.exists()) {
+            const kbData = kbDoc.data();
+            setAccess({
+              emma: kbData.emma === true,
+              sungWen: kbData.sungWen === true,
+              marquavious: kbData.marquavious === true,
+              charlie: kbData.charlie === true,
+              evidahQ: kbData.evidahQ === true,
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching access control:', error);
+        } finally {
+          setAccessLoading(false);
+        }
+      } else {
+        setAccessLoading(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [selectedCompany]);
+
+  // Check if any subscription is active
+  const hasAnyAccess = access.emma || access.sungWen || access.marquavious || access.charlie || access.evidahQ;
+  
+  // Helper for locked items
+  const LockedItem = ({ label }: { label: string }) => (
+    <div className="flex items-center justify-between opacity-50 cursor-not-allowed">
+      <div className="flex items-center">
+        <svg
+          className="shrink-0 fill-current text-gray-400 dark:text-gray-500"
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+        >
+          <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" />
+        </svg>
+        <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+          {label}
+        </span>
+      </div>
+    </div>
+  );
+
+  const handleLockedClick = (e: React.MouseEvent, section: string) => {
+    e.preventDefault();
+    router.push(`/${selectedCompany}/settings/plans`);
+  };
 
   // Fetch notification counts
   useEffect(() => {
@@ -341,364 +423,452 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
             </ul>
           </div>
 
-          {/* Knowledge Base - Dropdown */}
-          <div>
-            <h3 className="text-xs uppercase text-gray-400 dark:text-gray-500 font-semibold pl-3">
-              <span className="hidden lg:block lg:sidebar-expanded:hidden 2xl:hidden text-center w-6" aria-hidden="true">
-                •••
-              </span>
-              <span className="lg:hidden lg:sidebar-expanded:block 2xl:block">Knowledge Base</span>
-            </h3>
-            <ul className="mt-3">
-              <SidebarLinkGroup open={pathname?.includes('/dashboard') || pathname?.includes('/categories') || pathname?.includes('/articles') || false}>
-                {(handleClick, open) => {
-                  const isActive = pathname?.includes('/dashboard') || pathname?.includes('/categories') || pathname?.includes('/articles');
-                  return (
-                    <>
-                      <a
-                        href="#0"
-                        className={`block text-gray-800 dark:text-gray-100 truncate transition duration-150 ${
-                          isActive ? '' : 'hover:text-gray-900 dark:hover:text-white'
-                        }`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleClick();
-                          setSidebarExpanded(true);
-                        }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center">
-                            <svg
-                              className={`shrink-0 fill-current ${
-                                isActive
-                                  ? 'text-violet-500'
-                                  : 'text-gray-400 dark:text-gray-500'
-                              }`}
-                              xmlns="http://www.w3.org/2000/svg"
-                              width="16"
-                              height="16"
-                              viewBox="0 0 16 16"
-                            >
-                              <path d="M5.936.278A7.983 7.983 0 0 1 8 0a8 8 0 1 1-8 8c0-.722.104-1.413.278-2.064a1 1 0 1 1 1.932.516A5.99 5.99 0 0 0 2 8a6 6 0 1 0 6-6c-.53 0-1.045.076-1.548.21A1 1 0 1 1 5.936.278Z" />
-                              <path d="M6.068 7.482A2.003 2.003 0 0 0 8 10a2 2 0 1 0-.518-3.932L3.707 2.293a1 1 0 0 0-1.414 1.414l3.775 3.775Z" />
-                            </svg>
-                            <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                              Dashboard
-                            </span>
+          {/* Knowledge Base - Dropdown (requires emma or evidahQ) */}
+          {(access.emma || access.evidahQ) ? (
+            <div>
+              <h3 className="text-xs uppercase text-gray-400 dark:text-gray-500 font-semibold pl-3">
+                <span className="hidden lg:block lg:sidebar-expanded:hidden 2xl:hidden text-center w-6" aria-hidden="true">
+                  •••
+                </span>
+                <span className="lg:hidden lg:sidebar-expanded:block 2xl:block">Knowledge Base</span>
+              </h3>
+              <ul className="mt-3">
+                <SidebarLinkGroup open={pathname?.includes('/dashboard') || pathname?.includes('/categories') || pathname?.includes('/articles') || false}>
+                  {(handleClick, open) => {
+                    const isActive = pathname?.includes('/dashboard') || pathname?.includes('/categories') || pathname?.includes('/articles');
+                    return (
+                      <>
+                        <a
+                          href="#0"
+                          className={`block text-gray-800 dark:text-gray-100 truncate transition duration-150 ${
+                            isActive ? '' : 'hover:text-gray-900 dark:hover:text-white'
+                          }`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleClick();
+                            setSidebarExpanded(true);
+                          }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center">
+                              <svg
+                                className={`shrink-0 fill-current ${
+                                  isActive
+                                    ? 'text-violet-500'
+                                    : 'text-gray-400 dark:text-gray-500'
+                                }`}
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="16"
+                                height="16"
+                                viewBox="0 0 16 16"
+                              >
+                                <path d="M5.936.278A7.983 7.983 0 0 1 8 0a8 8 0 1 1-8 8c0-.722.104-1.413.278-2.064a1 1 0 1 1 1.932.516A5.99 5.99 0 0 0 2 8a6 6 0 1 0 6-6c-.53 0-1.045.076-1.548.21A1 1 0 1 1 5.936.278Z" />
+                                <path d="M6.068 7.482A2.003 2.003 0 0 0 8 10a2 2 0 1 0-.518-3.932L3.707 2.293a1 1 0 0 0-1.414 1.414l3.775 3.775Z" />
+                              </svg>
+                              <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                Dashboard
+                              </span>
+                            </div>
+                            {/* Icon */}
+                            <div className="flex shrink-0 ml-2">
+                              <svg
+                                className={`w-3 h-3 shrink-0 ml-1 fill-current text-gray-400 dark:text-gray-500 ${
+                                  open && 'rotate-180'
+                                }`}
+                                viewBox="0 0 12 12"
+                              >
+                                <path d="M5.9 11.4L.5 6l1.4-1.4 4 4 4-4L11.3 6z" />
+                              </svg>
+                            </div>
                           </div>
-                          {/* Icon */}
-                          <div className="flex shrink-0 ml-2">
-                            <svg
-                              className={`w-3 h-3 shrink-0 ml-1 fill-current text-gray-400 dark:text-gray-500 ${
-                                open && 'rotate-180'
-                              }`}
-                              viewBox="0 0 12 12"
-                            >
-                              <path d="M5.9 11.4L.5 6l1.4-1.4 4 4 4-4L11.3 6z" />
-                            </svg>
-                          </div>
+                        </a>
+                        <div className="lg:hidden lg:sidebar-expanded:block 2xl:block">
+                          <ul className={`pl-8 mt-1 ${!open && 'hidden'}`}>
+                            <li className="mb-1 last:mb-0">
+                              <Link
+                                href={`/${selectedCompany}/dashboard`}
+                                className={`block transition duration-150 truncate ${
+                                  pathname === `/${selectedCompany}/dashboard`
+                                    ? 'text-violet-500'
+                                    : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                }`}
+                              >
+                                <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                  Main
+                                </span>
+                              </Link>
+                            </li>
+                            <li className="mb-1 last:mb-0">
+                              <Link
+                                href={`/${selectedCompany}/categories`}
+                                className={`block transition duration-150 truncate ${
+                                  pathname === `/${selectedCompany}/categories`
+                                    ? 'text-violet-500'
+                                    : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                }`}
+                              >
+                                <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                  Categories
+                                </span>
+                              </Link>
+                            </li>
+                            <li className="mb-1 last:mb-0">
+                              <Link
+                                href={`/${selectedCompany}/articles`}
+                                className={`block transition duration-150 truncate ${
+                                  pathname?.includes('/articles')
+                                    ? 'text-violet-500'
+                                    : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                }`}
+                              >
+                                <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                  Articles
+                                </span>
+                              </Link>
+                            </li>
+                          </ul>
                         </div>
-                      </a>
-                      <div className="lg:hidden lg:sidebar-expanded:block 2xl:block">
-                        <ul className={`pl-8 mt-1 ${!open && 'hidden'}`}>
-                          <li className="mb-1 last:mb-0">
-                            <Link
-                              href={`/${selectedCompany}/dashboard`}
-                              className={`block transition duration-150 truncate ${
-                                pathname === `/${selectedCompany}/dashboard`
-                                  ? 'text-violet-500'
-                                  : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                              }`}
-                            >
-                              <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                                Main
-                              </span>
-                            </Link>
-                          </li>
-                          <li className="mb-1 last:mb-0">
-                            <Link
-                              href={`/${selectedCompany}/categories`}
-                              className={`block transition duration-150 truncate ${
-                                pathname === `/${selectedCompany}/categories`
-                                  ? 'text-violet-500'
-                                  : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                              }`}
-                            >
-                              <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                                Categories
-                              </span>
-                            </Link>
-                          </li>
-                          <li className="mb-1 last:mb-0">
-                            <Link
-                              href={`/${selectedCompany}/articles`}
-                              className={`block transition duration-150 truncate ${
-                                pathname?.includes('/articles')
-                                  ? 'text-violet-500'
-                                  : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                              }`}
-                            >
-                              <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                                Articles
-                              </span>
-                            </Link>
-                          </li>
-                        </ul>
-                      </div>
-                    </>
-                  )
-                }}
-              </SidebarLinkGroup>
-            </ul>
-          </div>
+                      </>
+                    )
+                  }}
+                </SidebarLinkGroup>
+              </ul>
+            </div>
+          ) : (
+            <div>
+              <h3 className="text-xs uppercase text-gray-400 dark:text-gray-500 font-semibold pl-3">
+                <span className="hidden lg:block lg:sidebar-expanded:hidden 2xl:hidden text-center w-6" aria-hidden="true">
+                  •••
+                </span>
+                <span className="lg:hidden lg:sidebar-expanded:block 2xl:block">Knowledge Base</span>
+              </h3>
+              <ul className="mt-3">
+                <li className="pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0">
+                  <a
+                    href="#0"
+                    onClick={(e) => handleLockedClick(e, 'Knowledge Base')}
+                    className="block text-gray-400 dark:text-gray-500"
+                  >
+                    <LockedItem label="Locked - Upgrade" />
+                  </a>
+                </li>
+              </ul>
+            </div>
+          )}
 
-          {/* Help Desk */}
-          <div>
-            <h3 className="text-xs uppercase text-gray-400 dark:text-gray-500 font-semibold pl-3">
-              <span className="hidden lg:block lg:sidebar-expanded:hidden 2xl:hidden text-center w-6" aria-hidden="true">
-                •••
-              </span>
-              <span className="lg:hidden lg:sidebar-expanded:block 2xl:block">Help Desk</span>
-            </h3>
-            <ul className="mt-3">
-              <li
-                className={`pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0 bg-linear-to-r ${
-                  pathname?.includes('/inbox') &&
-                  'from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04]'
-                }`}
-              >
-                <Link
-                  href={`/${selectedCompany}/inbox`}
-                  className="block text-gray-800 dark:text-gray-100 truncate transition duration-150 hover:text-gray-900 dark:hover:text-white"
+          {/* Help Desk (requires charlie or evidahQ) */}
+          {(access.charlie || access.evidahQ) ? (
+            <div>
+              <h3 className="text-xs uppercase text-gray-400 dark:text-gray-500 font-semibold pl-3">
+                <span className="hidden lg:block lg:sidebar-expanded:hidden 2xl:hidden text-center w-6" aria-hidden="true">
+                  •••
+                </span>
+                <span className="lg:hidden lg:sidebar-expanded:block 2xl:block">Help Desk</span>
+              </h3>
+              <ul className="mt-3">
+                <li
+                  className={`pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0 bg-linear-to-r ${
+                    pathname?.includes('/inbox') &&
+                    'from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04]'
+                  }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <svg
-                        className={`shrink-0 fill-current ${
-                          pathname?.includes('/inbox')
-                            ? 'text-violet-500'
-                            : 'text-gray-400 dark:text-gray-500'
-                        }`}
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 16 16"
-                      >
-                        <path d="M11.92 6.851c.044-.027.09-.05.137-.07.481-.275.758-.68.908-1.256.126-.55.169-.81.357-2.058.075-.498.144-.91.217-1.264-4.122.75-7.087 2.984-9.12 6.284a18.087 18.087 0 0 0-1.985 4.585 17.07 17.07 0 0 0-.354 1.506c-.05.265-.076.448-.086.535a1 1 0 0 1-1.988-.226c.056-.49.209-1.312.502-2.357a20.063 20.063 0 0 1 2.208-5.09C5.31 3.226 9.306.494 14.913.004a1 1 0 0 1 .954 1.494c-.237.414-.375.993-.567 2.267-.197 1.306-.244 1.586-.392 2.235-.285 1.094-.789 1.853-1.552 2.363-.748 3.816-3.976 5.06-8.515 4.326a1 1 0 0 1 .318-1.974c2.954.477 4.918.025 5.808-1.556-.628.085-1.335.121-2.127.121a1 1 0 1 1 0-2c1.458 0 2.434-.116 3.08-.429Z" />
-                      </svg>
-                      <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                        Inbox
-                      </span>
-                      {notificationCounts.inbox > 0 && (
-                        <span className="ml-auto lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                          <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-violet-500 text-white text-xs font-semibold">
-                            {notificationCounts.inbox > 99 ? '99+' : notificationCounts.inbox}
-                          </span>
+                  <Link
+                    href={`/${selectedCompany}/inbox`}
+                    className="block text-gray-800 dark:text-gray-100 truncate transition duration-150 hover:text-gray-900 dark:hover:text-white"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <svg
+                          className={`shrink-0 fill-current ${
+                            pathname?.includes('/inbox')
+                              ? 'text-violet-500'
+                              : 'text-gray-400 dark:text-gray-500'
+                          }`}
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 16 16"
+                        >
+                          <path d="M11.92 6.851c.044-.027.09-.05.137-.07.481-.275.758-.68.908-1.256.126-.55.169-.81.357-2.058.075-.498.144-.91.217-1.264-4.122.75-7.087 2.984-9.12 6.284a18.087 18.087 0 0 0-1.985 4.585 17.07 17.07 0 0 0-.354 1.506c-.05.265-.076.448-.086.535a1 1 0 0 1-1.988-.226c.056-.49.209-1.312.502-2.357a20.063 20.063 0 0 1 2.208-5.09C5.31 3.226 9.306.494 14.913.004a1 1 0 0 1 .954 1.494c-.237.414-.375.993-.567 2.267-.197 1.306-.244 1.586-.392 2.235-.285 1.094-.789 1.853-1.552 2.363-.748 3.816-3.976 5.06-8.515 4.326a1 1 0 0 1 .318-1.974c2.954.477 4.918.025 5.808-1.556-.628.085-1.335.121-2.127.121a1 1 0 1 1 0-2c1.458 0 2.434-.116 3.08-.429Z" />
+                        </svg>
+                        <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                          Inbox
                         </span>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Live Chat */}
-          <div>
-            <h3 className="text-xs uppercase text-gray-400 dark:text-gray-500 font-semibold pl-3">
-              <span className="hidden lg:block lg:sidebar-expanded:hidden 2xl:hidden text-center w-6" aria-hidden="true">
-                •••
-              </span>
-              <span className="lg:hidden lg:sidebar-expanded:block 2xl:block">Live Chat</span>
-            </h3>
-            <ul className="mt-3">
-              <li
-                className={`pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0 bg-linear-to-r ${
-                  pathname?.includes('/live-chat') && !pathname?.includes('/settings/live-chat') &&
-                  'from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04]'
-                }`}
-              >
-                <Link
-                  href={`/${selectedCompany}/live-chat`}
-                  className="block text-gray-800 dark:text-gray-100 truncate transition duration-150 hover:text-gray-900 dark:hover:text-white"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <svg
-                        className={`shrink-0 fill-current ${
-                          pathname?.includes('/live-chat') && !pathname?.includes('/settings/live-chat')
-                            ? 'text-violet-500'
-                            : 'text-gray-400 dark:text-gray-500'
-                        }`}
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 16 16"
-                      >
-                        <path d="M8 0C3.6 0 0 3.1 0 7s3.6 7 8 7h.6l5.4 2v-4.4c1.2-1.2 2-2.8 2-4.6 0-3.9-3.6-7-8-7zm4 10.8v2.3L8.9 12H8c-3.3 0-6-2.2-6-5s2.7-5 6-5 6 2.2 6 5c0 1.7-1 3.2-2 4.8z" />
-                      </svg>
-                      <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                        Live Chat
-                      </span>
-                    </div>
-                  </div>
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Training - Dropdown */}
-          <div>
-            <h3 className="text-xs uppercase text-gray-400 dark:text-gray-500 font-semibold pl-3">
-              <span className="hidden lg:block lg:sidebar-expanded:hidden 2xl:hidden text-center w-6" aria-hidden="true">
-                •••
-              </span>
-              <span className="lg:hidden lg:sidebar-expanded:block 2xl:block">THE BRAIN</span>
-            </h3>
-            <ul className="mt-3">
-              <SidebarLinkGroup open={
-                pathname?.includes('/training') && 
-                (pathname === `/${selectedCompany}/training` || 
-                 pathname?.includes('/training/documents') || 
-                 pathname?.includes('/training/rules') || 
-                 pathname?.includes('/training/faq') ||
-                 pathname?.includes('/training/scenarios'))
-              }>
-                {(handleClick, open) => {
-                  const isActive = 
-                    pathname?.includes('/training') && 
-                    (pathname === `/${selectedCompany}/training` || 
-                     pathname?.includes('/training/documents') || 
-                     pathname?.includes('/training/rules') || 
-                     pathname?.includes('/training/faq') ||
-                     pathname?.includes('/training/scenarios'));
-                  return (
-                    <>
-                      <a
-                        href="#0"
-                        className={`block text-gray-800 dark:text-gray-100 truncate transition duration-150 ${
-                          isActive ? '' : 'hover:text-gray-900 dark:hover:text-white'
-                        }`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleClick();
-                          setSidebarExpanded(true);
-                        }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center">
-                            <svg
-                              className={`shrink-0 fill-current ${
-                                isActive
-                                  ? 'text-violet-500'
-                                  : 'text-gray-400 dark:text-gray-500'
-                              }`}
-                              xmlns="http://www.w3.org/2000/svg"
-                              width="16"
-                              height="16"
-                              viewBox="0 0 16 16"
-                            >
-                              <path d="M8.5 5.6a.5.5 0 1 0-1 0v.716l-2 1a.5.5 0 0 0 0 .895l7 3.5a.5.5 0 0 0 .448-.894L8.5 8.35V5.6z" />
-                              <path d="M2 2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H2zm13 2v2H1V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1zm-1 3v5a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V7h14z" />
-                            </svg>
-                            <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                              Training
+                        {notificationCounts.inbox > 0 && (
+                          <span className="ml-auto lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                            <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-violet-500 text-white text-xs font-semibold">
+                              {notificationCounts.inbox > 99 ? '99+' : notificationCounts.inbox}
                             </span>
-                          </div>
-                          {/* Icon */}
-                          <div className="flex shrink-0 ml-2">
-                            <svg
-                              className={`w-3 h-3 shrink-0 ml-1 fill-current text-gray-400 dark:text-gray-500 ${
-                                open && 'rotate-180'
-                              }`}
-                              viewBox="0 0 12 12"
-                            >
-                              <path d="M5.9 11.4L.5 6l1.4-1.4 4 4 4-4L11.3 6z" />
-                            </svg>
-                          </div>
-                        </div>
-                      </a>
-                      <div className="lg:hidden lg:sidebar-expanded:block 2xl:block">
-                        <ul className={`pl-8 mt-1 ${!open && 'hidden'}`}>
-                          <li className="mb-1 last:mb-0">
-                            <Link
-                              href={`/${selectedCompany}/training/scenarios`}
-                              className={`block transition duration-150 truncate ${
-                                pathname?.includes('/training/scenarios')
-                                  ? 'text-violet-500'
-                                  : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                              }`}
-                            >
-                              <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                                Scenarios
-                              </span>
-                            </Link>
-                          </li>
-                          <li className="mb-1 last:mb-0">
-                            <Link
-                              href={`/${selectedCompany}/training`}
-                              className={`block transition duration-150 truncate ${
-                                pathname === `/${selectedCompany}/training`
-                                  ? 'text-violet-500'
-                                  : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                              }`}
-                            >
-                              <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                                Refresh Knowledge
-                              </span>
-                            </Link>
-                          </li>
-                          <li className="mb-1 last:mb-0">
-                            <Link
-                              href={`/${selectedCompany}/training/documents`}
-                              className={`block transition duration-150 truncate ${
-                                pathname?.includes('/training/documents')
-                                  ? 'text-violet-500'
-                                  : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                              }`}
-                            >
-                              <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                                Documents
-                              </span>
-                            </Link>
-                          </li>
-                          <li className="mb-1 last:mb-0">
-                            <Link
-                              href={`/${selectedCompany}/training/rules`}
-                              className={`block transition duration-150 truncate ${
-                                pathname?.includes('/training/rules')
-                                  ? 'text-violet-500'
-                                  : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                              }`}
-                            >
-                              <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                                Rules
-                              </span>
-                            </Link>
-                          </li>
-                          <li className="mb-1 last:mb-0">
-                            <Link
-                              href={`/${selectedCompany}/training/faq`}
-                              className={`block transition duration-150 truncate ${
-                                pathname?.includes('/training/faq')
-                                  ? 'text-violet-500'
-                                  : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                              }`}
-                            >
-                              <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
-                                FAQ
-                              </span>
-                            </Link>
-                          </li>
-                          
-                        </ul>
+                          </span>
+                        )}
                       </div>
-                    </>
-                  )
-                }}
-              </SidebarLinkGroup>
-            </ul>
-          </div>
+                    </div>
+                  </Link>
+                </li>
+              </ul>
+            </div>
+          ) : (
+            <div>
+              <h3 className="text-xs uppercase text-gray-400 dark:text-gray-500 font-semibold pl-3">
+                <span className="hidden lg:block lg:sidebar-expanded:hidden 2xl:hidden text-center w-6" aria-hidden="true">
+                  •••
+                </span>
+                <span className="lg:hidden lg:sidebar-expanded:block 2xl:block">Help Desk</span>
+              </h3>
+              <ul className="mt-3">
+                <li className="pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0">
+                  <a
+                    href="#0"
+                    onClick={(e) => handleLockedClick(e, 'Help Desk')}
+                    className="block text-gray-400 dark:text-gray-500"
+                  >
+                    <LockedItem label="Locked - Upgrade" />
+                  </a>
+                </li>
+              </ul>
+            </div>
+          )}
+
+          {/* Live Chat (requires marquavious or evidahQ) */}
+          {(access.marquavious || access.evidahQ) ? (
+            <div>
+              <h3 className="text-xs uppercase text-gray-400 dark:text-gray-500 font-semibold pl-3">
+                <span className="hidden lg:block lg:sidebar-expanded:hidden 2xl:hidden text-center w-6" aria-hidden="true">
+                  •••
+                </span>
+                <span className="lg:hidden lg:sidebar-expanded:block 2xl:block">Live Chat</span>
+              </h3>
+              <ul className="mt-3">
+                <li
+                  className={`pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0 bg-linear-to-r ${
+                    pathname?.includes('/live-chat') && !pathname?.includes('/settings/live-chat') &&
+                    'from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04]'
+                  }`}
+                >
+                  <Link
+                    href={`/${selectedCompany}/live-chat`}
+                    className="block text-gray-800 dark:text-gray-100 truncate transition duration-150 hover:text-gray-900 dark:hover:text-white"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <svg
+                          className={`shrink-0 fill-current ${
+                            pathname?.includes('/live-chat') && !pathname?.includes('/settings/live-chat')
+                              ? 'text-violet-500'
+                              : 'text-gray-400 dark:text-gray-500'
+                          }`}
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 16 16"
+                        >
+                          <path d="M8 0C3.6 0 0 3.1 0 7s3.6 7 8 7h.6l5.4 2v-4.4c1.2-1.2 2-2.8 2-4.6 0-3.9-3.6-7-8-7zm4 10.8v2.3L8.9 12H8c-3.3 0-6-2.2-6-5s2.7-5 6-5 6 2.2 6 5c0 1.7-1 3.2-2 4.8z" />
+                        </svg>
+                        <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                          Live Chat
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                </li>
+              </ul>
+            </div>
+          ) : (
+            <div>
+              <h3 className="text-xs uppercase text-gray-400 dark:text-gray-500 font-semibold pl-3">
+                <span className="hidden lg:block lg:sidebar-expanded:hidden 2xl:hidden text-center w-6" aria-hidden="true">
+                  •••
+                </span>
+                <span className="lg:hidden lg:sidebar-expanded:block 2xl:block">Live Chat</span>
+              </h3>
+              <ul className="mt-3">
+                <li className="pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0">
+                  <a
+                    href="#0"
+                    onClick={(e) => handleLockedClick(e, 'Live Chat')}
+                    className="block text-gray-400 dark:text-gray-500"
+                  >
+                    <LockedItem label="Locked - Upgrade" />
+                  </a>
+                </li>
+              </ul>
+            </div>
+          )}
+
+          {/* Training - Dropdown (requires sungWen or evidahQ) */}
+          {(access.sungWen || access.evidahQ) ? (
+            <div>
+              <h3 className="text-xs uppercase text-gray-400 dark:text-gray-500 font-semibold pl-3">
+                <span className="hidden lg:block lg:sidebar-expanded:hidden 2xl:hidden text-center w-6" aria-hidden="true">
+                  •••
+                </span>
+                <span className="lg:hidden lg:sidebar-expanded:block 2xl:block">THE BRAIN</span>
+              </h3>
+              <ul className="mt-3">
+                <SidebarLinkGroup open={
+                  pathname?.includes('/training') && 
+                  (pathname === `/${selectedCompany}/training` || 
+                   pathname?.includes('/training/documents') || 
+                   pathname?.includes('/training/rules') || 
+                   pathname?.includes('/training/faq') ||
+                   pathname?.includes('/training/scenarios'))
+                }>
+                  {(handleClick, open) => {
+                    const isActive = 
+                      pathname?.includes('/training') && 
+                      (pathname === `/${selectedCompany}/training` || 
+                       pathname?.includes('/training/documents') || 
+                       pathname?.includes('/training/rules') || 
+                       pathname?.includes('/training/faq') ||
+                       pathname?.includes('/training/scenarios'));
+                    return (
+                      <>
+                        <a
+                          href="#0"
+                          className={`block text-gray-800 dark:text-gray-100 truncate transition duration-150 ${
+                            isActive ? '' : 'hover:text-gray-900 dark:hover:text-white'
+                          }`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleClick();
+                            setSidebarExpanded(true);
+                          }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center">
+                              <svg
+                                className={`shrink-0 fill-current ${
+                                  isActive
+                                    ? 'text-violet-500'
+                                    : 'text-gray-400 dark:text-gray-500'
+                                }`}
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="16"
+                                height="16"
+                                viewBox="0 0 16 16"
+                              >
+                                <path d="M8.5 5.6a.5.5 0 1 0-1 0v.716l-2 1a.5.5 0 0 0 0 .895l7 3.5a.5.5 0 0 0 .448-.894L8.5 8.35V5.6z" />
+                                <path d="M2 2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H2zm13 2v2H1V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1zm-1 3v5a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V7h14z" />
+                              </svg>
+                              <span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                Training
+                              </span>
+                            </div>
+                            {/* Icon */}
+                            <div className="flex shrink-0 ml-2">
+                              <svg
+                                className={`w-3 h-3 shrink-0 ml-1 fill-current text-gray-400 dark:text-gray-500 ${
+                                  open && 'rotate-180'
+                                }`}
+                                viewBox="0 0 12 12"
+                              >
+                                <path d="M5.9 11.4L.5 6l1.4-1.4 4 4 4-4L11.3 6z" />
+                              </svg>
+                            </div>
+                          </div>
+                        </a>
+                        <div className="lg:hidden lg:sidebar-expanded:block 2xl:block">
+                          <ul className={`pl-8 mt-1 ${!open && 'hidden'}`}>
+                            <li className="mb-1 last:mb-0">
+                              <Link
+                                href={`/${selectedCompany}/training/scenarios`}
+                                className={`block transition duration-150 truncate ${
+                                  pathname?.includes('/training/scenarios')
+                                    ? 'text-violet-500'
+                                    : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                }`}
+                              >
+                                <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                  Scenarios
+                                </span>
+                              </Link>
+                            </li>
+                            <li className="mb-1 last:mb-0">
+                              <Link
+                                href={`/${selectedCompany}/training`}
+                                className={`block transition duration-150 truncate ${
+                                  pathname === `/${selectedCompany}/training`
+                                    ? 'text-violet-500'
+                                    : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                }`}
+                              >
+                                <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                  Refresh Knowledge
+                                </span>
+                              </Link>
+                            </li>
+                            <li className="mb-1 last:mb-0">
+                              <Link
+                                href={`/${selectedCompany}/training/documents`}
+                                className={`block transition duration-150 truncate ${
+                                  pathname?.includes('/training/documents')
+                                    ? 'text-violet-500'
+                                    : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                }`}
+                              >
+                                <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                  Documents
+                                </span>
+                              </Link>
+                            </li>
+                            <li className="mb-1 last:mb-0">
+                              <Link
+                                href={`/${selectedCompany}/training/rules`}
+                                className={`block transition duration-150 truncate ${
+                                  pathname?.includes('/training/rules')
+                                    ? 'text-violet-500'
+                                    : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                }`}
+                              >
+                                <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                  Rules
+                                </span>
+                              </Link>
+                            </li>
+                            <li className="mb-1 last:mb-0">
+                              <Link
+                                href={`/${selectedCompany}/training/faq`}
+                                className={`block transition duration-150 truncate ${
+                                  pathname?.includes('/training/faq')
+                                    ? 'text-violet-500'
+                                    : 'text-gray-500/90 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                }`}
+                              >
+                                <span className="text-sm font-medium lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">
+                                  FAQ
+                                </span>
+                              </Link>
+                            </li>
+                            
+                          </ul>
+                        </div>
+                      </>
+                    )
+                  }}
+                </SidebarLinkGroup>
+              </ul>
+            </div>
+          ) : (
+            <div>
+              <h3 className="text-xs uppercase text-gray-400 dark:text-gray-500 font-semibold pl-3">
+                <span className="hidden lg:block lg:sidebar-expanded:hidden 2xl:hidden text-center w-6" aria-hidden="true">
+                  •••
+                </span>
+                <span className="lg:hidden lg:sidebar-expanded:block 2xl:block">THE BRAIN</span>
+              </h3>
+              <ul className="mt-3">
+                <li className="pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0">
+                  <a
+                    href="#0"
+                    onClick={(e) => handleLockedClick(e, 'Training')}
+                    className="block text-gray-400 dark:text-gray-500"
+                  >
+                    <LockedItem label="Locked - Upgrade" />
+                  </a>
+                </li>
+              </ul>
+            </div>
+          )}
 
           {/* Settings - Dropdown */}
           <div>

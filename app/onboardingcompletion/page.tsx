@@ -39,20 +39,30 @@ function Onboarding09Content() {
   useEffect(() => {
     setMounted(true);
     
-    // Get selectedCompany from localStorage
+    // Get selectedCompany from URL params first, then localStorage
     if (typeof window !== 'undefined') {
-      const storedCompany = localStorage.getItem('selectedCompany') || 'default';
+      const workspaceParam = searchParams.get('workspace');
+      const storedCompany = workspaceParam || localStorage.getItem('selectedCompany') || 'default';
       setSelectedCompany(storedCompany);
+      // Update localStorage if workspace param is provided
+      if (workspaceParam) {
+        localStorage.setItem('selectedCompany', workspaceParam);
+      }
     }
-    
+  }, [searchParams]);
+
+  useEffect(() => {
     // Get user from Firebase Auth
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setUserId(user.uid);
         
+        // Get the current selectedCompany (may have been updated by the previous useEffect)
+        const currentCompany = searchParams.get('workspace') || localStorage.getItem('selectedCompany') || selectedCompany;
+        
         // Load existing knowledgebase data if available
         try {
-          const kbRef = doc(db, 'Users', user.uid, 'knowledgebases', selectedCompany);
+          const kbRef = doc(db, 'Users', user.uid, 'knowledgebases', currentCompany);
           const kbDoc = await getDoc(kbRef);
           
           if (kbDoc.exists()) {
@@ -61,7 +71,7 @@ function Onboarding09Content() {
             // Check if onboarding is already complete
             if (kbData.onboardingDone === true) {
               // Redirect to chat page if onboarding is already done
-              router.push(`/${selectedCompany}/chat`);
+              router.push(`/${currentCompany}/chat`);
               return;
             }
             
@@ -86,7 +96,7 @@ function Onboarding09Content() {
     });
 
     return () => unsubscribe();
-  }, [router, selectedCompany]);
+  }, [router, selectedCompany, searchParams]);
 
   // Autofill Step 2 fields when user reaches that step
   useEffect(() => {
@@ -258,9 +268,8 @@ function Onboarding09Content() {
         localStorage.setItem('selectedCompany', selectedCompany);
       }
       
-      // Redirect to dashboard
-      const redirectTo = searchParams.get('from') || `/${selectedCompany}/chat`;
-      router.push(redirectTo);
+      // Redirect to plans page to set up subscription
+      router.push(`/${selectedCompany}/settings/plans`);
 
     } catch (error: any) {
       console.error('Error completing onboarding:', error);

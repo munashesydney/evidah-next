@@ -18,7 +18,7 @@ const db = getFirestore();
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { uid, agentId, displayName, role, phoneNumber } = body;
+    const { uid, agentId, displayName, role, phoneNumber, selectedCompany = 'default' } = body;
 
     // Validation
     if (!uid || !agentId) {
@@ -42,10 +42,12 @@ export async function PUT(request: NextRequest) {
     if (role !== undefined) updateData.role = role;
     if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
 
-    // Update agent document in Firestore
+    // Update agent document in workspace-specific Firestore location
     const agentDocRef = db
       .collection('Users')
       .doc(uid)
+      .collection('knowledgebases')
+      .doc(selectedCompany)
       .collection('AdditionalUsers')
       .doc(agentId);
 

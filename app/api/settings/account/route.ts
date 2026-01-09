@@ -32,16 +32,17 @@ export async function GET(request: NextRequest) {
     const userDocRef = db.collection('Users').doc(uid);
     const userDoc = await userDocRef.get();
 
-    if (!userDoc.exists) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+    let userData: any = {};
+    
+    if (userDoc.exists) {
+      userData = userDoc.data();
+    } else {
+      // User document doesn't exist - this can happen for agents
+      // Return default/empty data instead of erroring
+      console.log(`User document not found for uid: ${uid}, returning default data`);
     }
 
-    const userData = userDoc.data();
-
-    // Return user account data
+    // Return user account data (with defaults if document doesn't exist)
     return NextResponse.json({
       success: true,
       data: {

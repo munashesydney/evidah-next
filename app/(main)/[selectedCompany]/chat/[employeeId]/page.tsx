@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { auth, db } from '@/lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
-import { collection, query, orderBy, onSnapshot, doc } from 'firebase/firestore'
+import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore'
 import ChatMessages from '@/components/chat/chat-messages'
 import ChatInput from '@/components/chat/chat-input'
 import ToolsPanel from '@/components/chat/tools-panel'
@@ -30,6 +30,13 @@ export default function ChatPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [employee, setEmployee] = useState<Employee | null>(null)
+  const [access, setAccess] = useState({
+    emma: false,
+    sungWen: false,
+    marquavious: false,
+    charlie: false,
+    evidahQ: false,
+  })
   const [isAIOptionsPanelOpen, setIsAIOptionsPanelOpen] = useState(false)
   const [personalityLevel, setPersonalityLevel] = useState(2)
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
@@ -42,11 +49,55 @@ export default function ChatPage() {
   
   const isDarkMode = resolvedTheme === 'dark' || theme === 'dark'
 
-  // Authentication
+  // Authentication and access control
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setUserId(user.uid)
+        
+        // Fetch access control
+        try {
+          const kbRef = doc(db, 'Users', user.uid, 'knowledgebases', selectedCompany)
+          const kbDoc = await getDoc(kbRef)
+          
+          if (kbDoc.exists()) {
+            const kbData = kbDoc.data()
+            const accessData = {
+              emma: kbData.emma === true,
+              sungWen: kbData.sungWen === true,
+              marquavious: kbData.marquavious === true,
+              charlie: kbData.charlie === true,
+              evidahQ: kbData.evidahQ === true,
+            }
+            setAccess(accessData)
+            
+            // Check if employee is available, redirect if not
+            let isAvailable = false
+            switch (employeeId) {
+              case 'charlie':
+                isAvailable = accessData.charlie || accessData.evidahQ
+                break
+              case 'marquavious':
+                isAvailable = accessData.marquavious || accessData.evidahQ
+                break
+              case 'emma':
+                isAvailable = accessData.emma || accessData.evidahQ
+                break
+              case 'sung-wen':
+                isAvailable = accessData.sungWen || accessData.evidahQ
+                break
+              default:
+                isAvailable = false
+            }
+            
+            if (!isAvailable) {
+              router.push(`/${selectedCompany}/settings/plans`)
+              return
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching access control:', error)
+        }
       } else {
         router.push('/signin')
       }
@@ -54,7 +105,7 @@ export default function ChatPage() {
     })
 
     return () => unsubscribe()
-  }, [router])
+  }, [router, selectedCompany, employeeId])
 
   // Set employee data
   useEffect(() => {

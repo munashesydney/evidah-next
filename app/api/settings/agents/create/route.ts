@@ -19,7 +19,7 @@ const db = getFirestore();
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { uid, additionalEmail, additionalPassword, role, additionalUserData } = body;
+    const { uid, additionalEmail, additionalPassword, role, additionalUserData, selectedCompany = 'default' } = body;
 
     // Validation
     if (!uid) {
@@ -47,8 +47,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if agent with this email already exists
-    const agentsRef = userDocRef.collection('AdditionalUsers');
+    // Check if knowledgebase exists
+    const knowledgebaseRef = userDocRef.collection('knowledgebases').doc(selectedCompany);
+    const knowledgebaseDoc = await knowledgebaseRef.get();
+    
+    if (!knowledgebaseDoc.exists) {
+      return NextResponse.json(
+        { status: 0, message: 'Knowledgebase not found' },
+        { status: 404 }
+      );
+    }
+
+    // Check if agent with this email already exists in this workspace
+    const agentsRef = knowledgebaseRef.collection('AdditionalUsers');
     const existingAgentsSnapshot = await agentsRef
       .where('userEmail', '==', additionalEmail)
       .get();
@@ -77,7 +88,7 @@ export async function POST(request: NextRequest) {
       ...(additionalUserData || {}), // Spread operator to include any other additional data
     });
 
-    console.log(`Additional user ${additionalEmail} successfully added to company UID ${uid}.`);
+    console.log(`Additional user ${additionalEmail} successfully added to workspace ${selectedCompany} for user UID ${uid}.`);
 
     // Return the created agent data (without password)
     const createdAgent = {

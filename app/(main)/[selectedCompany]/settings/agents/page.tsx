@@ -58,13 +58,13 @@ export default function AgentsPage() {
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, [router, selectedCompany]);
 
   // Fetch agents from API
   const fetchAgents = async (userId: string) => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/settings/agents?uid=${userId}`);
+      const response = await fetch(`/api/settings/agents?uid=${userId}&selectedCompany=${selectedCompany}`);
       const result = await response.json();
 
       if (result.success) {
@@ -137,7 +137,7 @@ export default function AgentsPage() {
 
     setError('');
     try {
-      const response = await fetch(`/api/settings/agents/delete?uid=${uid}&agentId=${agentId}`, {
+      const response = await fetch(`/api/settings/agents/delete?uid=${uid}&agentId=${agentId}&selectedCompany=${selectedCompany}`, {
         method: 'DELETE',
       });
 
@@ -178,6 +178,7 @@ export default function AgentsPage() {
           displayName: editForm.displayName,
           role: editForm.role,
           phoneNumber: editForm.phoneNumber,
+          selectedCompany: selectedCompany,
         }),
       });
 

@@ -49,14 +49,16 @@ export async function POST(request: NextRequest) {
     
     // Check if user exists
     const userDoc = await userDocRef.get();
+    
     if (!userDoc.exists) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+      // User document doesn't exist - create it with the update data
+      // This can happen for agents or new users
+      console.log(`User document not found for uid: ${uid}, creating new document`);
+      await userDocRef.set(updateData, { merge: true });
+    } else {
+      // User exists - update it
+      await userDocRef.update(updateData);
     }
-
-    await userDocRef.update(updateData);
 
     // Fetch updated user data
     const updatedUserDoc = await userDocRef.get();

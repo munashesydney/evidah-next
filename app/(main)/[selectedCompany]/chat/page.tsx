@@ -1,7 +1,11 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
+import { auth, db } from '@/lib/firebase'
+import { onAuthStateChanged } from 'firebase/auth'
+import { doc, getDoc } from 'firebase/firestore'
 
 interface Employee {
   id: string
@@ -61,8 +65,72 @@ export default function ChatSelectionPage() {
   const params = useParams()
   const router = useRouter()
   const selectedCompany = params.selectedCompany as string
+  
+  // Access control state
+  const [access, setAccess] = useState({
+    emma: false,
+    sungWen: false,
+    marquavious: false,
+    charlie: false,
+    evidahQ: false,
+  })
+  const [accessLoading, setAccessLoading] = useState(true)
+
+  // Fetch access control from knowledgebase
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user && selectedCompany) {
+        try {
+          const kbRef = doc(db, 'Users', user.uid, 'knowledgebases', selectedCompany)
+          const kbDoc = await getDoc(kbRef)
+          
+          if (kbDoc.exists()) {
+            const kbData = kbDoc.data()
+            setAccess({
+              emma: kbData.emma === true,
+              sungWen: kbData.sungWen === true,
+              marquavious: kbData.marquavious === true,
+              charlie: kbData.charlie === true,
+              evidahQ: kbData.evidahQ === true,
+            })
+          }
+        } catch (error) {
+          console.error('Error fetching access control:', error)
+        } finally {
+          setAccessLoading(false)
+        }
+      } else {
+        setAccessLoading(false)
+      }
+    })
+
+    return () => unsubscribe()
+  }, [selectedCompany])
+
+  // Check if employee is available
+  const isEmployeeAvailable = (employeeId: string): boolean => {
+    switch (employeeId) {
+      case 'charlie':
+        return access.charlie || access.evidahQ
+      case 'marquavious':
+        return access.marquavious || access.evidahQ
+      case 'emma':
+        return access.emma || access.evidahQ
+      case 'sung-wen':
+        return access.sungWen || access.evidahQ
+      default:
+        return false
+    }
+  }
+
+  // Filter available employees
+  const availableEmployees = employees.filter(emp => isEmployeeAvailable(emp.id))
 
   const handleEmployeeSelect = (employeeId: string) => {
+    if (!isEmployeeAvailable(employeeId)) {
+      router.push(`/${selectedCompany}/settings/plans`)
+      return
+    }
     router.push(`/${selectedCompany}/chat/${employeeId}`)
   }
 
@@ -79,54 +147,85 @@ export default function ChatSelectionPage() {
       </div>
 
       {/* Employee Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
-        {employees.map((employee) => (
-          <div
-            key={employee.id}
-            onClick={() => handleEmployeeSelect(employee.id)}
-            className="relative overflow-hidden rounded-2xl cursor-pointer group transition-all duration-300 hover:scale-105 hover:shadow-2xl bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
-          >
-            {/* Card Content */}
-            <div className="relative p-6 flex flex-col h-full">
-              {/* Employee Image */}
-              <div className="flex-shrink-0 mb-4">
-                <div className={`w-40 h-40 rounded-full overflow-hidden mx-auto bg-gradient-to-br ${employee.theme.gradient} border-4 border-white dark:border-gray-700 shadow-lg`}>
-                  <Image
-                    src={employee.avatar}
-                    alt={employee.name}
-                    width={160}
-                    height={160}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              </div>
+      {accessLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-gray-500 dark:text-gray-400">Loading employees...</div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
+          {employees.map((employee) => {
+            const isAvailable = isEmployeeAvailable(employee.id)
+            return (
+              <div
+                key={employee.id}
+                onClick={() => handleEmployeeSelect(employee.id)}
+                className={`relative overflow-hidden rounded-2xl transition-all duration-300 ${
+                  isAvailable
+                    ? 'cursor-pointer group hover:scale-105 hover:shadow-2xl bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                    : 'cursor-pointer bg-gray-100 dark:bg-gray-800/50 border-2 border-gray-300 dark:border-gray-700 opacity-60'
+                }`}
+              >
+                {/* Lock overlay for unavailable employees */}
+                {!isAvailable && (
+                  <div className="absolute inset-0 bg-gray-900/40 dark:bg-gray-900/60 z-10 flex items-center justify-center rounded-2xl">
+                    <div className="text-center">
+                      <svg
+                        className="w-12 h-12 mx-auto mb-2 text-white"
+                        fill="currentColor"
+                        viewBox="0 0 16 16"
+                      >
+                        <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" />
+                      </svg>
+                      <p className="text-white text-sm font-medium">Locked</p>
+                    </div>
+                  </div>
+                )}
 
-              {/* Employee Info */}
-              <div className="text-center flex-1 flex flex-col">
-                <div className="mb-3">
-                  <h3 className="text-xl font-bold mb-1 text-gray-900 dark:text-white">
-                    {employee.name}
-                  </h3>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                    {employee.role}
-                  </p>
-                </div>
+                {/* Card Content */}
+                <div className="relative p-6 flex flex-col h-full">
+                  {/* Employee Image */}
+                  <div className="flex-shrink-0 mb-4">
+                    <div className={`w-40 h-40 rounded-full overflow-hidden mx-auto bg-gradient-to-br ${employee.theme.gradient} border-4 border-white dark:border-gray-700 shadow-lg`}>
+                      <Image
+                        src={employee.avatar}
+                        alt={employee.name}
+                        width={160}
+                        height={160}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  </div>
 
-                {/*<p className="text-xs text-gray-500 dark:text-gray-400 mb-4 line-clamp-3">
-                  {employee.description}
-                </p>*/}
+                  {/* Employee Info */}
+                  <div className="text-center flex-1 flex flex-col">
+                    <div className="mb-3">
+                      <h3 className="text-xl font-bold mb-1 text-gray-900 dark:text-white">
+                        {employee.name}
+                      </h3>
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                        {employee.role}
+                      </p>
+                    </div>
 
-                {/* Start Chat button */}
-                <div className="mt-auto">
-                  <div className={`text-sm font-medium rounded-full px-4 py-2 bg-gradient-to-r ${employee.theme.gradient} text-white shadow-md hover:shadow-lg transition-shadow`}>
-                    Start Chat →
+                    {/* Start Chat button */}
+                    <div className="mt-auto">
+                      {isAvailable ? (
+                        <div className={`text-sm font-medium rounded-full px-4 py-2 bg-gradient-to-r ${employee.theme.gradient} text-white shadow-md hover:shadow-lg transition-shadow`}>
+                          Start Chat →
+                        </div>
+                      ) : (
+                        <div className="text-sm font-medium rounded-full px-4 py-2 bg-gray-400 dark:bg-gray-600 text-white">
+                          Upgrade to Unlock
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        ))}
-      </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Footer note */}
       <div className="text-sm text-gray-500 dark:text-gray-400 text-center mt-8 max-w-2xl mx-auto">

@@ -20,6 +20,7 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const uid = searchParams.get('uid');
     const agentId = searchParams.get('agentId');
+    const selectedCompany = searchParams.get('selectedCompany') || 'default';
 
     // Validation
     if (!uid || !agentId) {
@@ -29,10 +30,12 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Get agent document reference
+    // Get agent document reference from workspace-specific location
     const agentDocRef = db
       .collection('Users')
       .doc(uid)
+      .collection('knowledgebases')
+      .doc(selectedCompany)
       .collection('AdditionalUsers')
       .doc(agentId);
 
